@@ -1,0 +1,242 @@
+<targetscalcmain>
+    <getweeks>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+            select data_date as t2date from core.partition_date_create_times
+            where table_name='data.call_types_weekly'
+            and data_date > now()::date - '3 months'::interval
+            and data_date <= (select max(data_date) - interval '14 days' - interval '28 days'from core.partition_date_create_times where table_name='data.call_types_weekly' and data_date <= now()::date)
+            order by data_date;
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </getweeks>
+    <loop_on_out>
+        <iterable_parameter>out</iterable_parameter>
+        <in_loop_parameter>t2date</in_loop_parameter>
+        <tasks>getweeks, work.create_target_list_churn_inactivity2, work.create_target_list_portout2</tasks>
+    </loop_on_out>
+    <getweeks>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+            select data_date as tcrmdate from core.partition_date_create_time where table_name='data.in_crm'
+                and data_date > now()::Date - '3 months'::interval
+                and data_date <= (select max(data_date) - interval '14 days' - interval '28 days' from core.partition_date_create_times where table_name='data_call_types_weekly' and data_date <= now()::date) --at least 6 weeks after exist
+                and data_date > '{t2date}'::date - 14
+                and data_date <= '{t2date}'::date
+                order by data_date desc limit 1;
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+            <tcrmdate>$out.get(0).get(0)</tcrmdate>
+        </output_parameters>
+    </getweeks>
+    <work.create_target_list_churn_inactivity2>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select * from work.create_target_list_churn_inactivity_laith('{t2date}'::date, '{tcrmdate}'::date)
+            </sql>
+            <code>
+                
+--
+-- Name: create_target_list_churn_inactivity_laith(date); Type: FUNCTION; Schema: work; Owner: xsl
+--
+
+CREATE FUNCTION create_target_list_churn_inactivity_laith(in_date date) RETURNS void
+    AS $$
+
+DECLARE
+
+  mjp record;
+  records_found integer;  
+
+BEGIN
+
+  SELECT 
+    in_date AS t2,
+    in_date AS uc_churn_inactivity_t4,
+    in_date + 14 AS uc_churn_inactivity_t5,
+    in_date + 14 AS uc_churn_inactivity_t6,
+    in_date + 14+28 AS  uc_churn_inactivity_t7,
+    in_date - 3 AS tcrm
+  INTO mjp;
+
+  records_found := count(alias_id) from tmp.module_targets_tmp_laith WHERE use_case_name = 'churn_inactivity' AND the_date=mjp.t2;
+  
+  IF records_found IS NOT NULL AND records_found > 0 THEN
+    RAISE NOTICE 'Table results.module_results already contains data for mcall_types_weekly week %', mjp.t2;
+
+  ELSE
+ 
+  TRUNCATE tmp.module_targets_tmp_laith;
+  
+  INSERT INTO tmp.module_targets_tmp_laith (the_date, alias_id, use_case_name, target)
+  SELECT
+    mjp.t2 as the_date,
+    a.alias_id,
+    'churn_inactivity' AS use_case_name,
+    b.churn_status AS target
+  FROM data.in_crm AS a
+  INNER JOIN 
+  (SELECT
+      d.alias_id,
+      max(CASE WHEN d.monday < mjp.t2 THEN 1 ELSE 0 END) AS source_period_end_activity, --was active last week before t2
+      CASE 
+        WHEN max(d.monday) >= mjp.uc_churn_inactivity_t6 THEN -1 -- not churner if still active after t6 (max monday)
+        WHEN max(d.monday) >= mjp.uc_churn_inactivity_t4 AND max(d.monday) < mjp.uc_churn_inactivity_t5 THEN 1 -- churner if active between t4 t5 but nto after..(max monday)
+        ELSE NULL -- prob churner but wasn't active since t2 so nto caught
+      END AS churn_status    
+    FROM 
+(SELECT alias_id, monday FROM data.call_types_weekly WHERE direction = 'm' 
+UNION SELECT charged_id AS alias_id, date_trunc('week', timestamp + interval '2 days')::date - interval '2 days' AS monday FROM data.topup) 
+as d WHERE d.monday >= mjp.t2 - 7 AND d.monday < mjp.uc_churn_inactivity_t7 GROUP BY d.alias_id
+   ) AS b
+  ON a.alias_id = b.alias_id
+  WHERE a.date_inserted = mjp.tcrm
+  AND b.source_period_end_activity = 1; -- Activity during the end of source period is required
+
+  --DELETE FROM tmp.module_targets_tmp_laith_results WHERE use_case_name = 'churn_inactivity' AND the_date=mjp.t2;  
+  
+  --ANALYZE tmp.module_targets_tmp_laith;
+  
+  INSERT INTO tmp.module_targets_tmp_laith_results (the_date,use_case_name,total,pos,neg,pos_ratio,neg_ratio)
+  SELECT 
+  mjp.t2 as the_date,
+  'churn_inactivity' AS use_case_name,
+  count(mt.*) as total, 
+  SUM(CASE WHEN mt.target = 1 THEN 1 ELSE 0 END) AS pos, 
+  SUM(CASE WHEN mt.target = -1 THEN 1 ELSE 0 END) AS neg,
+  (SUM(CASE WHEN mt.target = 1 THEN 1 ELSE 0 END))::double precision / (count(mt.*))::double precision as pos_ratio,
+  (SUM(CASE WHEN mt.target = -1 THEN 1 ELSE 0 END))::double precision / (count(mt.*))::double precision as neg_ratio
+  FROM tmp.module_targets_tmp_laith AS mt 
+  WHERE mt.use_case_name = 'churn_inactivity' and the_date=mjp.t2;
+
+  END IF;
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </work.create_target_list_churn_inactivity2>
+    <work.create_target_list_portout2>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select * from work.create_target_list_portout_laith('{t2date}'::date, '{tcrmdate}'::date)
+            </sql>
+            <code>
+                
+--
+-- Name: create_target_list_portout_laith(date); Type: FUNCTION; Schema: work; Owner: xsl
+--
+
+CREATE FUNCTION create_target_list_portout_laith(in_date date) RETURNS void
+    AS $$
+
+DECLARE
+
+  mjp record;
+  records_found integer;  
+
+BEGIN
+
+  SELECT 
+    in_date AS t2,
+    in_date AS uc_portout_t4,
+    in_date + 14 AS uc_portout_t5,
+    in_date - 3 AS tcrm
+  INTO mjp;
+
+  records_found := count(*) from tmp.module_targets_tmp_laith WHERE use_case_name = 'portout' AND the_date=mjp.t2;
+  
+  IF records_found IS NOT NULL AND records_found > 0 THEN
+    RAISE NOTICE 'Table results.module_results already contains data for mcall_types_weekly week %', mjp.t2;
+  
+  ELSE
+ 
+  TRUNCATE tmp.module_targets_tmp_laith;
+
+  INSERT INTO tmp.module_targets_tmp_laith (the_date, alias_id, use_case_name, target)
+  SELECT
+    mjp.t2 as the_date,
+    a.alias_id,
+    'portout' AS use_case_name,
+    CASE
+      WHEN port.request_date IS NOT NULL AND port.request_date BETWEEN mjp.uc_portout_t4 AND mjp.uc_portout_t5 THEN 1 -- requested port out during t4 - t5
+      WHEN port.request_date IS NOT NULL AND port.request_date < mjp.uc_portout_t4 THEN NULL -- exclude requests before t4
+      ELSE -1 -- otherwise, no port-out requests made up to t5
+    END AS target
+  FROM data.in_crm AS a
+  LEFT JOIN (
+    SELECT alias_id, max(request_date)::date AS request_date
+    FROM data.port_out_requests
+    WHERE request_date <= mjp.uc_portout_t5 + '1 week'::interval -- assuming non-first-time port-out will not happen within a week
+    GROUP BY alias_id
+  ) AS port
+  ON a.alias_id = port.alias_id
+  INNER JOIN (
+    SELECT
+      alias_id,
+      max(CASE WHEN monday < mjp.t2 THEN 1 ELSE 0 END) AS source_period_end_activity -- activity during end of source period
+    FROM (
+      SELECT alias_id, monday FROM data.call_types_weekly WHERE direction = 'm'
+      UNION
+      SELECT charged_id AS alias_id, date_trunc('week', timestamp::date + 2)::date - 2 AS monday FROM data.topup
+    ) AS cdrtop
+    WHERE cdrtop.monday BETWEEN mjp.t2 - 7 AND mjp.t2
+    GROUP BY alias_id
+  ) d
+  ON a.alias_id = d.alias_id
+  WHERE a.date_inserted = mjp.tcrm
+  AND d.source_period_end_activity = 1;
+
+  --DELETE FROM tmp.module_targets_tmp_laith_results WHERE use_case_name = 'portout' AND the_date=mjp.t2;  
+  
+  --ANALYZE tmp.module_targets_tmp_laith;
+
+  INSERT INTO tmp.module_targets_tmp_laith_results (the_date,use_case_name,total,pos,neg,pos_ratio,neg_ratio)
+  SELECT 
+  mjp.t2 as the_date,
+  'portout' AS use_case_name,
+  count(mt.*) as total, 
+  SUM(CASE WHEN mt.target = 1 THEN 1 ELSE 0 END) AS pos, 
+  SUM(CASE WHEN mt.target = -1 THEN 1 ELSE 0 END) AS neg,
+  (SUM(CASE WHEN mt.target = 1 THEN 1 ELSE 0 END))::double precision / (count(mt.*))::double precision as pos_ratio,
+  (SUM(CASE WHEN mt.target = -1 THEN 1 ELSE 0 END))::double precision / (count(mt.*))::double precision as neg_ratio
+  FROM tmp.module_targets_tmp_laith AS mt 
+  WHERE mt.use_case_name = 'portout'  and the_date=mjp.t2;
+
+  END IF;
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </work.create_target_list_portout2>
+    <SQLTask>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select * from tmp.module_targets_tmp_laith_results order by the_date;
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </SQLTask>
+</targetscalcmain>

@@ -1,0 +1,1049 @@
+<DataLoadingAggregation_MCI>
+    <check_ready_for_aggregation>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.check_ready_for_aggregation()
+            </sql>
+            <code>
+                
+--
+-- Name: check_ready_for_aggregation(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION check_ready_for_aggregation() RETURNS void
+    AS $$
+
+DECLARE
+
+  d text;
+  rec record;
+  day_counter integer := 0;
+  last_aggregated_day date default '20180105'::date; 
+  -- data starts at 01012018 1st saturday is 6th,hence first agg will have to be 1 to 6 jan. 
+
+BEGIN
+
+  -- Get the last date when aggregation was performed successfully.
+  SELECT a.lastday FROM (
+    SELECT core.yyyyww_to_date(max(period::integer)) + 6 AS lastday FROM data.cdr_weekly_statistics
+  ) a
+  INTO last_aggregated_day;
+  
+  IF last_aggregated_day IS NULL THEN
+    last_aggregated_day := '20180105'::date;
+  END IF;
+  -- data starts at 01012018 1st saturday is 6th,hence first agg will have to be 6 to 12 jan.
+  
+  RAISE INFO 'Last aggregated date is %', last_aggregated_day;
+
+  TRUNCATE TABLE tmp.aggr_checking_table;
+
+  FOR d IN (SELECT description FROM tmp.mci_file_list GROUP BY description ORDER BY description) LOOP 
+  
+  RAISE INFO 'Inserting for type  %', d;
+  
+  INSERT INTO tmp.aggr_checking_table
+    WITH all_dates AS (
+       SELECT last_aggregated_day + i AS the_date
+       FROM generate_series(1, ((SELECT max(data_date) FROM data.processed_data) - last_aggregated_day)::integer) AS i
+    ) 
+    SELECT
+      t.the_date,
+      d AS datasource,
+      coalesce(y.rowcnt, 0),
+      coalesce(y.avg_last_30_dates, 0),
+      coalesce(y.stddev_last_30_dates, 0),
+      coalesce(y.median_last_30_dates, 0),
+      coalesce(y.lower_bound, 0),
+      coalesce(y.upper_bound, 0),
+      CASE
+        WHEN y.data_date IS NULL THEN 'DATA MISSING'::text
+        WHEN y.rowcnt  IS NOT NULL AND y.rowcnt >= lower_bound AND y.rowcnt <= upper_bound  THEN 'OK'::text
+WHEN y.rowcnt  IS NOT NULL AND y.rowcnt > upper_bound THEN 'Above upper_bound'::text
+WHEN y.rowcnt  IS NOT NULL AND y.rowcnt < lower_bound AND y.rowcnt < 100000 THEN 'DATA LOW'::text
+WHEN y.rowcnt  IS NOT NULL AND y.rowcnt < lower_bound THEN 'Below lower_bound'::text
+ELSE 'OK'::text END AS flag
+    FROM all_dates t
+    LEFT JOIN (
+      SELECT
+        b.data_date,
+b.rowcnt,
+b.avg_last_30_dates,
+b.stddev_last_30_dates,
+b.median_last_30_dates,
+b.firstquartile_last_30_dates  - (b.iqr_last_30_dates*1.72) as lower_bound,
+        b.thirdquartile_last_30_dates  + (b.iqr_last_30_dates*1.72) as upper_bound
+      FROM (
+        SELECT
+          a.data_date,
+  a.rowcnt,
+          a30.rowcnt_30 AS avg_last_30_dates,
+          a30.stddev_30 as stddev_last_30_dates,
+  a30.qrt1_30 as firstquartile_last_30_dates,
+  a30.median_30 as median_last_30_dates,
+  a30.qrt3_30 as thirdquartile_last_30_dates,
+  a30.iqr_30 as iqr_last_30_dates
+        FROM (
+          SELECT
+            data_date,
+            sum(rowcount) AS rowcnt
+          FROM data.processed_data
+          WHERE file_name_check in (SELECT filename FROM tmp.mci_file_list where description=d)
+          GROUP BY data_date
+          ORDER BY data_date
+        ) a, (
+          SELECT
+            avg(rowcnt) AS rowcnt_30,
+            stddev_samp(rowcnt) AS stddev_30,
+percentile_cont(0.50) within group (order by rowcnt asc) as median_30,
+percentile_cont(0.25) within group (order by rowcnt asc) as qrt1_30,
+percentile_cont(0.75) within group (order by rowcnt asc) as qrt3_30,
+((percentile_cont(0.75) within group (order by rowcnt asc))-(percentile_cont(0.25) within group (order by rowcnt asc))) as iqr_30
+          FROM (
+            SELECT sum(x.rowcount) AS rowcnt from (
+select rowcount,data_date FROM data.processed_data 
+WHERE file_name_check in (SELECT filename FROM tmp.mci_file_list where description=d) 
+and rowcount > 100000 ) x
+            GROUP BY x.data_date
+            ORDER BY x.data_date DESC LIMIT 84
+          ) aa
+        ) a30
+      ) b
+    ) y
+    ON y.data_date = t.the_date;
+
+  END LOOP;
+
+  -- Loop through daily list.
+  -- Count how many days of accumulated data
+  FOR d IN (SELECT description FROM tmp.mci_file_list GROUP BY description ORDER BY description) LOOP
+    
+RAISE INFO 'Checking data %', d;
+
+    -- Check through all days since last_aggregated day to see if enough data for aggregation.
+    day_counter := 0;
+    FOR rec IN (SELECT * FROM tmp.aggr_checking_table WHERE datasource = d ORDER BY the_date) LOOP
+
+      IF rec.flag = 'OK' OR rec.flag = 'Above upper_bound' OR rec.flag = 'Below lower_bound' OR rec.flag='DATA LOW' THEN
+        day_counter := day_counter + 1;
+
+        RAISE INFO '%', rec;
+
+        IF day_counter > 7 then
+          RAISE INFO 'Table % has 1 week data accumulated', d;
+
+          UPDATE tmp.validate_aggregation_results SET
+            prev_agg_day = last_aggregated_day,
+            status = 'READY',
+            latest_loaded_date = rec.the_date,
+            accumulated_unaggregated_data = rec.the_date - last_aggregated_day
+          WHERE datasource = d;
+
+          CONTINUE;
+        ELSE
+          UPDATE tmp.validate_aggregation_results SET
+            prev_agg_day = last_aggregated_day,
+            status = 'NOT READY',
+            latest_loaded_date = rec.the_date,
+            accumulated_unaggregated_data = rec.the_date - last_aggregated_day
+          WHERE datasource = d;
+
+          INSERT INTO tmp.validate_aggregation_results
+          SELECT
+            last_aggregated_day AS prev_agg_day,
+            rec.datasource AS datasource,
+            'NOT READY' AS status,
+            rec.the_date AS latest_loaded_date ,
+            rec.the_date - last_aggregated_day AS accumulated_unaggregated_data
+          WHERE NOT EXISTS (SELECT 1 FROM tmp.validate_aggregation_results WHERE datasource = rec.datasource);
+
+          CONTINUE;
+        END IF;
+      ELSE
+        RAISE WARNING 'BAD OR MISSING DATA from type %, %', d, rec;
+
+        UPDATE tmp.validate_aggregation_results SET
+          prev_agg_day = last_aggregated_day,
+          status = 'DATA MISSING' || rec.the_date::text
+        WHERE datasource = d;
+
+        INSERT INTO tmp.validate_aggregation_results
+        SELECT
+          last_aggregated_day AS prev_agg_day,
+          rec.datasource AS datasource,
+          'DATA MISSING' || rec.the_date::text AS status,
+          NULL AS latest_loaded_date
+        WHERE NOT EXISTS (SELECT 1 FROM tmp.validate_aggregation_results WHERE datasource = rec.datasource);
+
+        EXIT;
+      END IF;
+    END LOOP;
+  END LOOP;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </check_ready_for_aggregation>
+    <aggregate_check>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.cdr_aggregation_validate()
+            </sql>
+            <code>
+                
+--
+-- Name: cdr_aggregation_validate(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION cdr_aggregation_validate() RETURNS integer
+    AS $$
+DECLARE
+
+  start_agg_date date;
+  end_agg_date date;
+  check_count_cdr_ready integer;
+  not_ready_data record;
+
+BEGIN
+
+  SELECT max(prev_agg_day) + 1 FROM tmp.validate_aggregation_results INTO start_agg_date;
+
+  SELECT count(*) INTO check_count_cdr_ready
+  FROM tmp.validate_aggregation_results
+  WHERE latest_loaded_date > prev_agg_day
+  AND accumulated_unaggregated_data >= 7;
+
+  IF check_count_cdr_ready >= 7 THEN -- LzU 10-06-18: based on 7 types
+
+  end_agg_date := start_agg_date + 7; --7??
+
+  RAISE INFO 'Ready to aggregate cdr start wk = %, end wk = %', start_agg_date, end_agg_date;
+
+  RETURN 1;
+
+  ELSE
+
+    RAISE INFO 'CDR not ready for aggregation';
+
+    FOR not_ready_data IN (SELECT * FROM tmp.validate_aggregation_results WHERE latest_loaded_date <= prev_agg_day OR accumulated_unaggregated_data < 7) LOOP
+      RAISE INFO '%', not_ready_data ;
+    END LOOP;
+
+    RETURN 0;
+
+  END IF;
+
+END;
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+            <aggregate_check>$out.get(0).get(0)</aggregate_check>
+        </output_parameters>
+    </aggregate_check>
+    <split>
+        <when>parameter with name equal to aggregate_check and int value not equal to 1</when>
+        <tasks>fualt, email</tasks>
+    </split>
+    <fualt>
+        <fualt_message>aggregation not passed</fualt_message>
+    </fualt>
+    <email>
+        <input_parameters>
+            <command>echo "aggregation check not passed" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA aggregation node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </email>
+    <set_start_and_end_date>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select max(prev_agg_day)+1 as start_date, max(prev_agg_day) + 8 as end_date from tmp.validate_aggregation_results;
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+            <start_full_weeks>$out.get(0).get(0)</start_full_weeks>
+            <end_full_weeks>$out.get(0).get(1)</end_full_weeks>
+        </output_parameters>
+    </set_start_and_end_date>
+    <email>
+        <input_parameters>
+            <command>echo "agg fullweeks started" + $start_date_force + $start_full_weeks + $end_date_force + $end_full_weeks +| mailx -v -r "churn@mci.ir" -s "FAA aggregation node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </email>
+    <tmp_cdr_full_weeks_optimized>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.cdr_full_weeks_optimized(
+                    select case when '$start_date_force'~'start_date' or '$end_date_force'~'$end_date' then '$start_full_week' else '$start_date_force' end)::timestamp without time zone,
+                    select case when '$start_date_force'~'start_date' or '$end_date_force'~'$end_date' then '$end_full_week' else '$end_date_force' end)::timestamp without time zone,
+                );
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </tmp_cdr_full_weeks_optimized>
+    <aliases_network_cdr>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.aliases_network_cdr();
+            </sql>
+            <code>
+                
+--
+-- Name: aliases_network_cdr(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_network_cdr() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.network
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    d_new.alias_id, 
+    d_new.validity, 
+    1::smallint AS data_source_id, -- 1="cdr", 2="topup", 3="crm"
+    d_new.net_id 
+  FROM (
+    SELECT
+      dd.alias_id,
+      dd.net_id,
+      dd.min_call_time::date AS validity,
+      row_number() OVER (
+        PARTITION BY 
+          dd.monday, 
+          dd.alias_id
+        ORDER BY 
+          dd.call_count DESC, 
+          dd.min_call_time ASC, 
+          dd.net_id ASC 
+      ) AS rank_id
+    FROM (
+      SELECT
+        u.monday,
+        u.alias_id,
+        u.net_id,
+        min(u.timestamp) AS min_call_time,
+        count(*) AS call_count
+      FROM (
+        SELECT u1.alias_a AS alias_id, u1.a_network AS net_id, date_trunc('week', u1.call_time::date + integer '2')::date - integer '2' AS monday, u1.call_time AS timestamp FROM tmp.cdr_full_weeks AS u1 UNION ALL
+        SELECT u2.alias_b AS alias_id, u2.b_network AS net_id, date_trunc('week', u2.call_time::date + integer '2')::date - integer '2' AS monday, u2.call_time AS timestamp FROM tmp.cdr_full_weeks AS u2 
+      ) AS u
+      WHERE u.alias_id IS NOT NULL
+      GROUP BY u.monday, u.alias_id, u.net_id
+    ) AS dd
+  ) AS d_new
+  LEFT JOIN aliases.network AS d_old
+  ON  d_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              1 = d_old.data_source_id
+  AND d_new.net_id   = d_old.net_id
+  WHERE d_new.rank_id = 1
+  AND d_old.alias_id IS NULL;
+
+  ANALYZE aliases.network;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </aliases_network_cdr>
+    <email>
+        <input_parameters>
+            <command>echo "agg calltypesweekly started" + $start_date_force + $start_full_week + $end_date_force + $end_full_week | mailx -v -r "churn@mci.ir" -s "FAA aggregation node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </email>
+    <data_call_types_weekly>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.call_types_weekly();
+            </sql>
+            <code>
+                
+--
+-- Name: call_types_weekly(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION call_types_weekly() RETURNS void
+    AS $$
+/*
+ * 2013-03-07: ICIF 113
+ */
+DECLARE
+
+BEGIN
+
+  INSERT INTO data.call_types_weekly
+  (alias_id, direction, monday, call_type, max_call_time, row_count, day_count,
+   neigh_count, sum_call_duration, sum_call_cost, cell_id_count,
+   -- sum_parameter1, sum_parameter2, sum_parameter3, sum_parameter4
+   onnet_voice_min_peakhour, onnet_voice_min_offpeakhour, onnet_data_mb_peakhour, onnet_data_mb_offpeakhour,
+   voice_usage_min_businesshours, voice_usage_min_nonbusinesshours, data_usage_min_businesshours, data_usage_min_nonbusinesshours,
+   data_usage_2g, data_usage_3g, data_usage_4g)
+  SELECT
+    aa.alias_id,
+    aa.direction,
+    aa.monday, -- SATURDAY 
+    aa.call_type,
+    aa.max_call_time,
+    aa.row_count,
+    aa.day_count,
+    aa.neigh_count,
+    aa.sum_call_duration,
+    aa.sum_call_cost,
+    aa.cell_id_count,
+    --aa.sum_parameter1,
+    --aa.sum_parameter2,
+    --aa.sum_parameter3,
+    --aa.sum_parameter4
+    aa.onnet_voice_min_peakhour, -- 09-05-2017 LZu: The on-net voice minutes made during peak hours  Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_voice_min_offpeakhour, -- 09-05-2017 LZu: The on-net voice minutes made during off peak hours Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_data_mb_peakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours  Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.onnet_data_mb_offpeakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours off Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.voice_usage_min_businesshours, -- 09-05-2017 LZu: voice usage (in minutes) during business hours	Business hours: 8AM-5PM inclusive
+    aa.voice_usage_min_nonbusinesshours, -- 09-05-2017 LZu: voice usage (in minutes) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_businesshours, -- 09-05-2017 LZu: data usage (in MB) during business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_nonbusinesshours, -- 09-05-2017 LZu: data usage (in MB) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_2g, -- 09-05-2017 LZu: 2G data usage in MB
+    aa.data_usage_3g, -- 09-05-2017 LZu: 3G data usage in MB
+    aa.data_usage_4g -- 09-05-2017 LZu: 4G data usage in MB
+  FROM (
+    SELECT
+      a.alias_a                             AS alias_id,
+      'm'                                   AS direction, -- made transactions
+      date_trunc('week', a.call_time + '48 hours'::interval)::date - '48 hours'::interval AS monday,  -- 15-05-2017 LZu: SATURDAY
+      a.call_type                           AS call_type,
+      max(a.call_time)                      AS max_call_time,
+      count(*)                              AS row_count,
+      count(distinct a.call_time::date)     AS day_count, -- misleading for data since VGS is multiple events per session as per OCS rules
+      count(distinct alias_b)               AS neigh_count,
+      count(distinct a.a_cell_id)           AS cell_id_count,
+      sum(a.call_length)                    AS sum_call_duration,
+      sum(a.a_call_cost)                    AS sum_call_cost,
+      --count(distinct b_cell_id)               AS sum_parameter1,  -- These sum_parameter1 are just examples. There could/should be some other aggregates as well.
+      --avg(CASE WHEN termination_reason in ('Reason 3') then 1 ELSE 0 END) AS sum_parameter2, -- This is for example a list of a abnormal termination reasons
+      --avg(call_length)                      AS sum_parameter3,  
+      --avg(remaining_credits)                AS sum_parameter4
+      sum(CASE WHEN call_type IN ('1') AND ispeakvoice = 1 AND a_network = 1 AND b_network = 1 THEN call_length ELSE 0 END) AS onnet_voice_min_peakhour,
+      sum(CASE WHEN call_type IN ('1') AND ispeakvoice = 0 AND a_network = 1 AND b_network = 1 THEN call_length ELSE 0 END) AS onnet_voice_min_offpeakhour,
+      sum(CASE WHEN call_type IN ('5') AND ispeakdata = 1 THEN call_length ELSE 0 END) AS onnet_data_mb_peakhour,
+      sum(CASE WHEN call_type IN ('5') AND ispeakdata = 0 THEN call_length ELSE 0 END) AS onnet_data_mb_offpeakhour,	  
+      sum(CASE WHEN call_type IN ('1') AND isbusiness = 1 AND a_network = 1 THEN call_length ELSE 0 END) AS voice_usage_min_businesshours,
+      sum(CASE WHEN call_type IN ('1') AND isbusiness = 0 AND a_network = 1 THEN call_length ELSE 0 END) AS voice_usage_min_nonbusinesshours,
+      sum(CASE WHEN call_type IN ('5') AND isbusiness = 1 THEN call_length ELSE 0 END) AS data_usage_min_businesshours,
+      sum(CASE WHEN call_type IN ('5') AND isbusiness = 0 THEN call_length ELSE 0 END) AS data_usage_min_nonbusinesshours,
+      sum(CASE WHEN call_type IN ('5') AND ratt_type IN ('2G') THEN call_length * 1000 ELSE 0 END) AS data_usage_2g,
+      sum(CASE WHEN call_type IN ('5') AND ratt_type IN ('3G') THEN call_length * 1000 ELSE 0 END) AS data_usage_3g,
+      sum(CASE WHEN call_type IN ('5') AND ratt_type IN ('4G') THEN call_length * 1000 ELSE 0 END) AS data_usage_4g
+    FROM tmp.cdr_full_weeks AS a
+    GROUP BY alias_id, direction, monday, call_type
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT monday FROM data.call_types_weekly WHERE direction = 'm' GROUP BY monday
+  ) bb -- return only that new Saturday data (anything already there does not get added) 
+  ON aa.monday = bb.monday
+  WHERE bb.monday IS NULL;
+
+
+  ANALYZE data.call_types_weekly;
+
+
+  INSERT INTO data.call_types_weekly
+  (alias_id, direction, monday, call_type, max_call_time, row_count, day_count,
+   neigh_count, sum_call_duration, sum_call_cost, cell_id_count,
+   --sum_parameter1, sum_parameter2, sum_parameter3, sum_parameter4
+   onnet_voice_min_peakhour, onnet_voice_min_offpeakhour, onnet_data_mb_peakhour, onnet_data_mb_offpeakhour,
+   voice_usage_min_businesshours, voice_usage_min_nonbusinesshours, data_usage_min_businesshours, data_usage_min_nonbusinesshours,
+   data_usage_2g, data_usage_3g, data_usage_4g)
+  SELECT
+    aa.alias_id,
+    aa.direction,
+    aa.monday,
+    aa.call_type,
+    aa.max_call_time,
+    aa.row_count,
+    aa.day_count,
+    aa.neigh_count,
+    aa.sum_call_duration,
+    aa.sum_call_cost,
+    aa.cell_id_count,
+    --aa.sum_parameter1,
+    --aa.sum_parameter2,
+    --aa.sum_parameter3,
+    --aa.sum_parameter4
+    aa.onnet_voice_min_peakhour, -- 09-05-2017 LZu: The on-net voice minutes made during peak hours  Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_voice_min_offpeakhour, -- 09-05-2017 LZu: The on-net voice minutes made during off peak hours Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_data_mb_peakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours  Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.onnet_data_mb_offpeakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours off Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.voice_usage_min_businesshours, -- 09-05-2017 LZu: voice usage (in minutes) during business hours	Business hours: 8AM-5PM inclusive
+    aa.voice_usage_min_nonbusinesshours, -- 09-05-2017 LZu: voice usage (in minutes) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_businesshours, -- 09-05-2017 LZu: data usage (in MB) during business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_nonbusinesshours, -- 09-05-2017 LZu: data usage (in MB) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_2g, -- 09-05-2017 LZu: 2G data usage in MB
+    aa.data_usage_3g, -- 09-05-2017 LZu: 3G data usage in MB
+    aa.data_usage_4g -- 09-05-2017 LZu: 4G data usage in MB
+  FROM (
+    SELECT
+      a.alias_b                             AS alias_id,
+      'r'                                   AS direction, -- received transactions
+      date_trunc('week', a.call_time + '48 hours'::interval)::date - '48 hours'::interval AS monday, -- 15-05-2017 LZu: SATURDAY
+      a.call_type                           AS call_type,
+      max(a.call_time)                      AS max_call_time,
+      count(*)                              AS row_count,
+      count(distinct a.call_time::date)     AS day_count,
+      count(distinct alias_a)               AS neigh_count,
+      count(distinct a.b_cell_id)           AS cell_id_count,
+      sum(a.call_length)                    AS sum_call_duration,
+      NULL                                  AS sum_call_cost, -- Call cost not well-defined for received calls
+      --count(distinct a_cell_id)               AS sum_parameter1, -- These sum_parameter1 are just examples. There could/should be some other aggregates as well.
+      --avg(CASE WHEN termination_reason in ('Reason 3') then 1 ELSE 0 END) AS sum_parameter2, -- This is for example a list of a abnormal termination reasons
+      --avg(call_length)                      AS sum_parameter3,  
+      --NULL                                  AS sum_parameter4 -- Does not make sense collect here caller remaining credits since it is someting that receiver is not aware of at all
+      NULL AS onnet_voice_min_peakhour,
+      NULL AS onnet_voice_min_offpeakhour,
+      NULL AS onnet_data_mb_peakhour,
+      NULL AS onnet_data_mb_offpeakhour,	  
+      NULL AS voice_usage_min_businesshours,
+      NULL AS voice_usage_min_nonbusinesshours,	  
+      NULL AS data_usage_min_businesshours,
+      NULL AS data_usage_min_nonbusinesshours,
+      NULL AS data_usage_2g,
+      NULL AS data_usage_3g,
+      NULL AS data_usage_4g	  
+    FROM tmp.cdr_full_weeks AS a
+    WHERE call_type IN (1, 2, 3, 4) -- Take only those call types that have valid receiving party
+    GROUP BY alias_id, direction, monday, call_type
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT monday FROM data.call_types_weekly WHERE direction = 'r' GROUP BY monday 
+  ) bb
+  ON aa.monday = bb.monday
+  WHERE bb.monday IS NULL;
+  
+  ANALYZE data.call_types_weekly;
+
+
+  INSERT INTO data.data_usage_weekly_stats
+  (table_name, period, rowcount, dis_alias, mms_percentage, mms_avg,
+   mms_day, data_percentage, data_avg, data_day)
+  SELECT 
+    'call_types_weekly'::text AS table_name,
+    aa.period,
+    count(*) AS rowcount,
+    count(distinct alias_id) AS dis_alias,
+    sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END)::real / count(distinct alias_id) * 100 as mms_percentage,
+    sum(CASE WHEN call_type = 4 THEN row_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END), 0) AS mms_avg,
+    sum(CASE WHEN call_type = 4 THEN day_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END), 0) AS mms_day,
+    sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END)::real / count(distinct alias_id) * 100 AS data_percentage,  
+    sum(CASE WHEN call_type = 5 THEN row_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END), 0) AS data_avg,
+    sum(CASE WHEN call_type = 5 THEN day_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END), 0) AS data_day
+  FROM (
+    SELECT core.date_to_yyyyww(monday) AS period, * FROM data.call_types_weekly WHERE direction = 'm'
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.data_usage_weekly_stats WHERE table_name = 'call_types_weekly'::text GROUP BY period
+  ) bb
+  ON aa.period = bb.period
+  WHERE bb.period IS NULL
+  GROUP BY aa.period;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </data_call_types_weekly>
+    <aliases_update>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select aliases.update();
+            </sql>
+            <code>
+                
+--
+-- Name: update(); Type: FUNCTION; Schema: aliases; Owner: xsl
+--
+
+CREATE FUNCTION update() RETURNS void
+    AS $$
+
+/* SUMMARY:
+ * To be added here...
+ * HW: 2013-07-23: several lines have been commented out or replace to avoid the use of a
+ * correlated subquery, which is not compatible with greenplum version 4.0.x.
+ * These lines should be taken into use again when greenplum 
+ * on host fabric has been upgraded to version 4.2.x.
+ * All commented lines are preceeded by
+ *   -- HW: correlated subquery commented out (n)
+ * the number n indicates the number of commented out lines
+ */
+
+DECLARE
+  net_id_default integer := -1;
+  blacklist_default integer := 0;
+  validity_default date := '1800-01-01'::date;
+
+BEGIN
+
+  TRUNCATE aliases.aliases_updated;
+
+  INSERT INTO aliases.aliases_updated (
+    string_id,
+    alias_id,
+    on_black_list,
+    in_out_network,
+    net_id,
+    prev_net_id,
+    validity )
+  SELECT DISTINCT
+    d.string_id,
+    d.alias_id,
+    -- HW: correlated subquery commented out (1)
+    -- coalesce(d.on_black_list, blacklist_default),
+    blacklist_default,
+    CASE WHEN lower(coalesce(d.net_description, '')) = 'operator own net' THEN 1 ELSE 0 END AS in_out_network, 
+    coalesce(d.net_id, net_id_default),
+    coalesce(d.prev_net_id, net_id_default),
+    coalesce(d.validity, validity_default) AS validity
+  FROM (
+    SELECT
+      s.string_id,
+      s.alias_id,
+      -- HW: correlated subquery commented out
+      -- b.on_black_list,
+      n.net_name,
+      n.net_description,
+      n.net_id,
+      n.prev_net_id,
+      n.validity,
+      row_number() OVER (
+        PARTITION BY s.string_id, n.validity
+        -- HW: correlated subquery commented out and replaced (1)
+        -- ORDER BY b.validity DESC, b.on_black_list DESC, n.net_id ASC
+        ORDER BY n.net_id ASC
+      ) AS b_row_id
+    FROM aliases.string_id AS s
+    LEFT JOIN (
+      SELECT
+        nn.alias_id,
+        nl.net_name,
+        nl.net_description,
+        nn.net_id,
+        nn.prev_net_id,
+        nn.validity
+        -- HW: correlated subquery commented out
+        -- nn.max_start_date
+      FROM (
+        SELECT  -- Notice: We could prioritize different data sources here.
+          nnn.alias_id,
+          nnn.validity,
+          coalesce(nnn.net_id, net_id_default) AS net_id,
+          lag(coalesce(nnn.net_id, net_id_default), 1, net_id_default) OVER (
+            PARTITION BY nnn.alias_id 
+            ORDER BY nnn.validity ASC, nnn.data_source_id DESC
+          ) AS prev_net_id,
+          row_number() OVER (
+            PARTITION BY nnn.alias_id 
+            ORDER BY nnn.validity ASC, nnn.data_source_id DESC
+          ) AS n_row_id
+          -- HW: correlated subquery commented out
+          -- greenplum on host fabric has been updated to version 4.2.x
+          -- (SELECT  coalesce(MAX(validity), '1800-01-01'::date) as max_start_date
+          --  FROM aliases.blacklist
+          --  WHERE coalesce(nnn.validity, '2100-01-01'::date) >= coalesce(validity, '1800-01-01'::date)) AS
+          -- max_start_date
+        FROM aliases.network AS nnn
+      ) AS nn
+      LEFT JOIN aliases.network_list AS nl
+      ON nn.net_id = nl.net_id
+      WHERE nn.n_row_id = 1
+      OR nn.prev_net_id != nn.net_id
+    ) AS n
+    ON s.alias_id = n.alias_id
+    -- HW: correlated subquery commented out
+    -- LEFT JOIN aliases.blacklist AS b 
+    -- ON s.alias_id = b.alias_id
+    -- AND coalesce(b.validity, '1800-01-01'::date) = n.max_start_date
+  ) AS d 
+  WHERE d.b_row_id = 1; -- FIX ME: Black list information can only update when network information updates
+  
+  ANALYZE aliases.aliases_updated;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </aliases_update>
+    <email>
+        <input_parameters>
+            <command>echo "agg insplitweekly started" + $start_date_force + $start_full_week + $end_date_force + $end_full_week | mailx -v -r "churn@mci.ir" -s "FAA aggregation node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </email>
+    <in_split_weekly>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.in_split_weekly();
+            </sql>
+            <code>
+                
+--
+-- Name: in_split_weekly(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION in_split_weekly() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO data.in_split_weekly
+  (alias_a, alias_b, cdr_w, sms_w, mms_w, video_w, v_c, v_s, v_c_week, v_s_week, v_c_day, v_s_day, v_c_eve, v_s_eve, sms_c_week, sms_c_day, sms_c_eve, data_usage_day, data_usage_eve,data_usage_weekday, weekly_data_usage,weekly_data_usage_cost, weekly_cost, period)
+  SELECT
+    aa.alias_a, 
+    aa.alias_b, 
+    aa.cdr_w, 
+    aa.sms_w, 
+    aa.mms_w, 
+    aa.video_w, 
+    aa.v_c,  
+    aa.v_s, 
+    aa.v_c_week, 
+    aa.v_s_week, 
+    aa.v_c_day, 
+    aa.v_s_day, 
+    aa.v_c_eve,  
+    aa.v_s_eve, 
+    aa.sms_c_week, 
+    aa.sms_c_day, 
+    aa.sms_c_eve, 
+    aa.data_usage_day,	
+    aa.data_usage_eve,
+    aa.data_usage_weekday,
+    aa.weekly_data_usage,
+    aa.weekly_data_usage_cost,
+    aa.weekly_cost,
+    aa.period
+  FROM (
+    SELECT
+      aa.alias_a,
+      --aa.alias_b,
+	  coalesce(aa.alias_b,355497879) as alias_b, --temp fix for null alias_b in data cdrs. INSERT INTO aliases.string_id (string_id,date_inserted) VALUES ('dummy','2018-06-11'::date);
+      sum(CASE WHEN call_type = 1 THEN 0.4 * sqrt(call_length) ELSE 0 END) AS cdr_w,
+      sum(CASE WHEN call_type = 2 THEN 6.0 ELSE 0 END) AS sms_w,
+      sum(CASE WHEN call_type = 4 THEN 12.0 ELSE 0 END) AS mms_w,
+      sum(CASE WHEN call_type = 3 THEN 0.8 * sqrt(call_length) ELSE 0 END) AS video_w,
+      sum(CASE WHEN call_type = 1 THEN 1 ELSE 0 END) AS v_c,
+      sum(CASE WHEN call_type = 1 THEN call_length ELSE 0 END) AS v_s,
+      sum(
+        CASE
+          WHEN call_type = 1 AND 
+          call_time >= (date_trunc('week', call_time + '48 hours'::interval)::timestamp without time zone - '48 hours'::interval) AND
+          call_time < ((date_trunc('week', call_time + '48 hours'::interval)::date + 4 + '18 hours'::interval)::timestamp without time zone - '48 hours'::interval) -- 16-05-17 LZu: SATURDAY as SOW 
+          THEN 1 ELSE 0
+      END) AS v_c_week,
+      sum(
+        CASE
+          WHEN call_type = 1 AND 
+          call_time >= (date_trunc('week', call_time + '48 hours'::interval)::timestamp without time zone - '48 hours'::interval) AND
+          call_time < ((date_trunc('week', call_time + '48 hours'::interval)::date + 4 + '18 hours'::interval)::timestamp without time zone - '48 hours'::interval)
+          THEN call_length ELSE 0 -- 16-05-17 LZu: SATURDAY as SOW 
+      END) AS v_s_week,
+      sum(
+        CASE
+          WHEN call_type = 1 AND
+          call_time >= (date_trunc('day', call_time)::date + '7 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone 
+          THEN 1 ELSE 0
+      END) AS v_c_day,
+      sum(
+        CASE 
+          WHEN call_type = 1 AND
+          call_time >= (date_trunc('day', call_time)::date + '7 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone 
+          THEN call_length ELSE 0
+      END) AS v_s_day,
+      sum(
+        CASE
+          WHEN call_type = 1 AND
+          call_time >= (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '22 hours'::interval)::timestamp without time zone 
+          THEN 1 ELSE 0
+      END) AS v_c_eve,
+      sum(
+        CASE
+          WHEN call_type = 1 AND
+          call_time >= (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '22 hours'::interval)::timestamp without time zone 
+          THEN call_length ELSE 0
+      END) AS v_s_eve,
+      sum(
+        CASE
+          WHEN call_type = 2 AND
+          call_time >= (date_trunc('week', call_time + '48 hours'::interval)::timestamp without time zone - '48 hours'::interval) AND
+          call_time < ((date_trunc('week', call_time + '48 hours'::interval)::date + 4 + '18 hours'::interval)::timestamp without time zone - '48 hours'::interval)
+          THEN 1 ELSE 0 -- 16-05-17 LZu: SATURDAY as SOW 
+      END) AS sms_c_week,
+      sum(
+        CASE
+          WHEN call_type = 2 AND
+          call_time >= (date_trunc('day', call_time)::date + '7 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone 
+          THEN 1 ELSE 0
+      END) AS sms_c_day,
+      sum(
+        CASE
+          WHEN call_type = 2 AND
+          call_time >= (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '22 hours'::interval)::timestamp without time zone 
+          THEN 1 ELSE 0
+      END) AS sms_c_eve,
+      sum(
+        CASE
+          WHEN call_type = 5 AND
+          call_time >= (date_trunc('day', call_time)::date + '7 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone 
+          THEN call_length ELSE 0
+      END) AS data_usage_day,
+      sum(
+        CASE
+          WHEN call_type = 5 AND
+          call_time >= (date_trunc('week', call_time + '48 hours'::interval)::date::timestamp without time zone - '48 hours'::interval)  AND
+          call_time < ((date_trunc('week', call_time + '48 hours'::interval)::date + 4 + '18 hours'::interval)::timestamp without time zone - '48 hours'::interval)  
+          THEN call_length ELSE 0 -- 16-05-17 LZu: SATURDAY as SOW 
+      END) AS data_usage_weekday,
+      sum(
+        CASE
+          WHEN call_type = 5 AND
+          call_time >= (date_trunc('day', call_time)::date + '17 hours'::interval)::timestamp without time zone AND
+          call_time < (date_trunc('day', call_time)::date + '22 hours'::interval)::timestamp without time zone 
+        THEN call_length ELSE 0
+        END) AS data_usage_eve,
+      sum(CASE WHEN call_type = 5 THEN call_length ELSE 0 END) AS weekly_data_usage,
+      sum(CASE WHEN call_type = 5 THEN a_call_cost ELSE 0 END) AS weekly_data_usage_cost,
+      sum(a_call_cost) AS weekly_cost,
+      core.date_to_yyyyww(aa.call_time::date) AS period 
+    FROM tmp.cdr_full_weeks aa
+    WHERE call_type IN (1, 2, 3, 4, 5)
+    GROUP BY alias_a, alias_b, period
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.in_split_weekly GROUP BY period
+  ) bb
+  ON aa.period = bb.period
+  WHERE bb.period IS NULL;
+  
+  ANALYZE data.in_split_weekly;
+
+
+  INSERT INTO data.cdr_weekly_statistics
+  (table_name, period, rowcount, dis_alias_a, dis_alias_b,
+   avg_voice, avg_voice_sum, avg_sms)
+  SELECT
+    'in_split_weekly'::text AS table_name,
+    aa.period,
+    count(*) AS rowcount,
+    count(distinct aa.alias_a) AS dis_alias_a,
+    count(distinct aa.alias_b) AS dis_alias_b,
+    avg(v_c) AS avg_voice,
+    avg(v_s) AS avg_voice_sum,
+    avg(sms_w / 6.0) AS avg_sms
+  FROM data.in_split_weekly aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.cdr_weekly_statistics WHERE table_name = 'in_split_weekly' GROUP BY period
+  ) bb
+  ON aa.period = bb.period
+  WHERE bb.period IS NULL
+  GROUP BY aa.period;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </in_split_weekly>
+    <weekly_cdr_aggregates>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.weekly_cdr_aggregates_wrapper();
+            </sql>
+            <code>
+                
+--
+-- Name: weekly_cdr_aggregates_wrapper(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION weekly_cdr_aggregates_wrapper() RETURNS void
+    AS $$
+/* SUMMARY
+ * This function is a wrapper for the function data.weekly_cdr_aggregates(text1, text2)
+ * which was originally called in the loading workflow. The arguments text1 and text2
+ * in the loading worklflow where the 2 select statements below (for firstww and lastww).
+ * Unfortunately the call to that function with the 2 select statements as
+ * arguments failed with 
+ *     RuntimeException: org.postgresql.util.PSQLException:
+ *     ERROR: Unexpected internal error: Segment process received signal SIGSEGV (postgres.c:3360)
+ *     (seg0 slice6 hrh5st26.comptel.com:40000 pid=32009) (cdbdisp.c:1457);
+ *     Cause: org.postgresql.util.PSQLException:
+ *     ERROR: Unexpected internal error: 
+ *     Segment process received signal SIGSEGV (postgres.c:3360) 
+ *     (seg0 slice6 hrh5st26.comptel.com:40000 pid=32009) (cdbdisp.c:1457)
+ * 
+ * Using the result of the 2 select statements as arguments to the function was 
+ * a work around for the problem.
+ * 
+ * So we call in the workflow now data.weekly_cdr_aggregates_wrapper()
+ * 
+ * INPUTS
+ * none
+ *
+ * VERSION
+ * 2012-11-13 HWe
+ */
+
+DECLARE
+
+  firstww integer := NULL;
+  lastww  integer := NULL;
+
+BEGIN
+  SELECT INTO firstww yyyyww1 FROM 
+  (
+       	select
+	min(aa.period) as yyyyww1
+	from (
+		select period from data.in_split_weekly group by period
+	) as aa
+	left join (
+	select period from data.in_split_aggregates group by period
+	) as bb
+	on aa.period = bb.period
+	where bb.period is null
+  ) as ttt; 
+
+  SELECT INTO lastww yyyyww2 FROM
+  (
+	select
+	max(cc.period) as yyyyww2
+	from (
+		select period from data.in_split_weekly group by period
+	) as cc
+	left join (
+		select period from data.in_split_aggregates group by period
+	) as dd
+	on cc.period = dd.period
+	where dd.period is null
+  ) as ttt;
+
+  perform data.weekly_cdr_aggregates(firstww, lastww);
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </weekly_cdr_aggregates>
+    <email>
+        <input_parameters>
+            <command>echo "weekly agg completed for" + $start_date_force + $start_full_week + $end_date_force + $end_full_week | mailx -v -r "churn@mci.ir" -s "FAA aggregation node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </email>
+</DataLoadingAggregation_MCI>

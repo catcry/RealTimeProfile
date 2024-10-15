@@ -1,0 +1,330 @@
+<DataLoadingLookUp_MCI>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "Run Lookup Dataloader started" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI lookup Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+    <Run_data_loader>
+        <input_parameters>
+            <command>$DataLoadingPath/database_loader_lookup.sh + $WORKFLOW_RUN_ID</command>
+            <host>$DataLoadingHost</host>
+            <identity></identity>
+            <password>$DataLoadingPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$DataLoadingUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </Run_data_loader>
+    <split>
+        <when>parameter with name equal to exitstatus and int value equal to 10</when>
+        <task>no input found</task>
+        <when>parameter with name equal to exitstatus and int value equal to 11</when>
+        <task>Duplicate input</task>
+        <when>parameter with name equal to exitstatus and int value equal to 0</when>
+        <task>Other errors</task>
+    </split>
+    <data_status_reason>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.status_reason();
+            </sql>
+            <code>
+                
+--
+-- Name: status_reason(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION status_reason() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO data.status_reason (
+    source_file, code, reason_en, reason_fa, date_inserted
+  )
+  SELECT
+    source_file,
+    CASE WHEN code IS NOT NULL AND trim(code) != '' THEN trim(code)::integer ELSE NULL END AS code,
+    CASE WHEN reason_en IS NOT NULL AND trim(reason_en) != '' THEN trim(reason_en) ELSE NULL END AS reason_en,
+    CASE WHEN reason_fa IS NOT NULL AND trim(reason_fa) != '' THEN trim(reason_fa) ELSE NULL END AS reason_fa,
+    to_date(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDD') AS date_inserted
+  FROM tmp.reason_lookup
+  WHERE lower(code) NOT LIKE '%code%'
+  AND "type"::integer = 2
+  ;
+    
+  ANALYZE data.status_reason;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </data_status_reason>
+    <data_disconnection_reason>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.disconnection_reason();
+            </sql>
+            <code>
+                
+--
+-- Name: disconnection_reason(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION disconnection_reason() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO data.disconnection_reason (
+    source_file, code, reason_en, reason_fa, date_inserted
+  )
+  SELECT
+    source_file,
+    CASE WHEN code IS NOT NULL AND trim(code) != '' THEN trim(code)::integer ELSE NULL END AS code,
+    CASE WHEN reason_en IS NOT NULL AND trim(reason_en) != '' THEN trim(reason_en) ELSE NULL END AS reason_en,
+    CASE WHEN reason_fa IS NOT NULL AND trim(reason_fa) != '' THEN trim(reason_fa) ELSE NULL END AS reason_fa,
+    to_date(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDD') AS date_inserted
+  FROM tmp.reason_lookup
+  WHERE lower(code) NOT LIKE '%code%'
+  AND "type"::integer = 1
+  ;
+    
+  ANALYZE data.disconnection_reason;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </data_disconnection_reason>
+    <data_product_bonus>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.product_bonus_new();
+            </sql>
+            <code>
+                
+--
+-- Name: product_bonus_new(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION product_bonus_new() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO data.product_information_bonus (
+    source_file, product_id, package_desc,
+    cost, sms_bonus, mms_bonus, gprs_bonus, call_bonus,
+    date_updated, duration_of_package, date_inserted
+  )
+  SELECT
+    source_file, 
+    CASE WHEN pkg_id IS NOT NULL AND trim(pkg_id) != '' THEN trim(pkg_id)::integer ELSE NULL END AS product_id,
+    CASE WHEN pkg_desc IS NOT NULL AND trim(pkg_desc) != '' THEN trim(pkg_desc) ELSE NULL END AS package_desc,
+    CASE WHEN pkg_cost IS NOT NULL AND trim(pkg_cost) != '' THEN round(pkg_cost::double precision) ELSE NULL END AS cost,
+    CASE WHEN sms_bonus IS NOT NULL AND trim(sms_bonus) != '' THEN trim(sms_bonus)::double precision ELSE NULL END AS sms_bonus,
+    CASE WHEN mms_bonus IS NOT NULL AND trim(mms_bonus) != '' THEN trim(mms_bonus)::double precision ELSE NULL END AS mms_bonus,
+    CASE WHEN gprs_bonus IS NOT NULL AND trim(gprs_bonus) != '' THEN trim(gprs_bonus)::double precision ELSE NULL END AS gprs_bonus,
+    CASE WHEN call_bonus IS NOT NULL AND trim(call_bonus) != '' THEN trim(call_bonus)::double precision ELSE NULL END AS call_bonus,
+    to_timestamp(ins_timestamp, 'YYYYMMDDHH24MI') AS date_updated,
+    CASE WHEN duration_of_pkg IS NOT NULL AND trim(duration_of_pkg) != '' THEN trim(duration_of_pkg)::double precision ELSE NULL END AS duration_of_package,
+    to_timestamp(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDDHH24MI') AS date_inserted
+  FROM tmp.product_information
+  WHERE lower(pkg_id) NOT LIKE '%pkg_id%'
+  AND "type"::integer = 0
+  ;
+    
+  ANALYZE data.product_information_bonus;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </data_product_bonus>
+    <data_product_discount>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.product_discount_new();
+            </sql>
+            <code>
+                
+--
+-- Name: product_discount_new(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION product_discount_new() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO data.product_information_discount (
+    source_file, product_id, package_desc,
+    cost, sms_percent, mms_percent, gprs_percent, call_percent,
+    date_updated, duration_of_package, date_inserted
+  )
+  SELECT
+    source_file, 
+    CASE WHEN pkg_id IS NOT NULL AND trim(pkg_id) != '' THEN trim(pkg_id)::integer ELSE NULL END AS product_id,
+    CASE WHEN pkg_desc IS NOT NULL AND trim(pkg_desc) != '' THEN trim(pkg_desc) ELSE NULL END AS package_desc,
+    CASE WHEN pkg_cost IS NOT NULL AND trim(pkg_cost) != '' THEN round(pkg_cost::double precision)::integer ELSE NULL END AS cost,
+    CASE WHEN sms_bonus IS NOT NULL AND trim(sms_bonus) != '' THEN trim(sms_bonus)::double precision ELSE NULL END AS sms_percent,
+    CASE WHEN mms_bonus IS NOT NULL AND trim(mms_bonus) != '' THEN trim(mms_bonus)::double precision ELSE NULL END AS mms_percent,
+    CASE WHEN gprs_bonus IS NOT NULL AND trim(gprs_bonus) != '' THEN trim(gprs_bonus)::double precision ELSE NULL END AS gprs_percent,
+    CASE WHEN call_bonus IS NOT NULL AND trim(call_bonus) != '' THEN trim(call_bonus)::double precision ELSE NULL END AS call_percent,
+    to_timestamp(ins_timestamp, 'YYYYMMDDHH24MI') AS date_updated,
+    CASE WHEN duration_of_pkg IS NOT NULL AND trim(duration_of_pkg) != '' THEN trim(duration_of_pkg)::double precision ELSE NULL END AS duration_of_package,
+    to_timestamp(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDDHH24MI') AS date_inserted
+  FROM tmp.product_information
+  WHERE lower(pkg_id) NOT LIKE '%pkg_id%'
+  AND "type"::integer = 1
+  ;
+    
+  ANALYZE data.product_information_discount;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </data_product_discount>
+    <data_device_tac>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select data.device_tac();
+            </sql>
+            <code>
+                
+--
+-- Name: device_tac(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION device_tac() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE data.device_tac;
+
+  INSERT INTO data.device_tac (
+    source_file, tac, marketing_name, internal_model_name, manufacturer,
+    bands, allocation_date, country_code, fixed_code, manufacturer_code,
+    radio_interface, brand_name, model_name, operating_system,
+    nfc, blueetooth, wlan, device_type, oem,
+    date_inserted
+  )
+  SELECT
+    d_new.source_file_edit AS source_file, -- Name of the flat file that uploaded to the table
+    CASE WHEN tac IS NOT NULL AND trim(tac) != '' THEN trim(tac) ELSE NULL END AS tac,
+    CASE WHEN marketing_name IS NOT NULL AND trim(marketing_name) != '' THEN trim(marketing_name) ELSE NULL END AS marketing_name,
+    CASE WHEN internal_model_name IS NOT NULL AND trim(internal_model_name) != '' THEN trim(internal_model_name) ELSE NULL END AS internal_model_name,
+    CASE WHEN manufacturer IS NOT NULL AND trim(manufacturer) != '' THEN trim(manufacturer) ELSE NULL END AS manufacturer,
+    CASE WHEN bands IS NOT NULL AND trim(bands) != '' THEN trim(bands) ELSE NULL END AS bands,
+    CASE WHEN allocation_date IS NOT NULL AND trim(allocation_date) != '' THEN to_date(trim(allocation_date), 'DD-Mon-YYYY') ELSE NULL END AS allocation_date,
+    CASE WHEN country_code IS NOT NULL AND trim(country_code) != '' THEN trim(country_code) ELSE NULL END AS country_code,
+    CASE WHEN fixed_code IS NOT NULL AND trim(fixed_code) != '' THEN trim(fixed_code) ELSE NULL END AS fixed_code,
+    CASE WHEN manufacturer_code IS NOT NULL AND trim(manufacturer_code) != '' THEN trim(manufacturer_code) ELSE NULL END AS manufacturer_code,
+    CASE WHEN radio_interface IS NOT NULL AND trim(radio_interface) != '' THEN trim(radio_interface) ELSE NULL END AS radio_interface,
+    CASE WHEN brand_name IS NOT NULL AND trim(brand_name) != '' THEN trim(brand_name) ELSE NULL END AS brand_name,
+    CASE WHEN model_name IS NOT NULL AND trim(model_name) != '' THEN trim(model_name) ELSE NULL END AS model_name,
+    CASE WHEN operating_system IS NOT NULL AND trim(operating_system) != '' THEN trim(operating_system) ELSE NULL END AS operating_system,
+    CASE WHEN nfc IS NOT NULL AND trim(nfc) != '' THEN trim(nfc) ELSE NULL END AS nfc,
+    CASE WHEN blueetooth IS NOT NULL AND trim(blueetooth) != '' THEN trim(blueetooth) ELSE NULL END AS blueetooth,
+    CASE WHEN wlan IS NOT NULL AND trim(wlan) != '' THEN trim(wlan) ELSE NULL END AS wlan,
+    CASE WHEN device_type IS NOT NULL AND trim(device_type) != '' THEN trim(device_type) ELSE NULL END AS device_type,
+    CASE WHEN oem IS NOT NULL AND trim(oem) != '' THEN trim(oem) ELSE NULL END AS oem,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD') AS date_inserted -- get from source_file, might need to derive from "month"
+  FROM (
+    SELECT 
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.device_tac
+    WHERE tac IS NOT NULL
+    AND lower(trim(tac)) NOT LIKE 'tac'
+  ) d_new
+  LEFT JOIN (
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE '%device_tac%'
+  ) AS d_old
+  ON d_new.source_file = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+  
+  ANALYZE data.device_tac;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </data_device_tac>
+    <sendemail1>
+        <input_parameters>
+            <command>echo "Run Lookup Dataloader finished" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI lookup Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail1>
+</DataLoadingLookUp_MCI>
+

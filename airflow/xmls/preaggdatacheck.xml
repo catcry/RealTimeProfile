@@ -1,0 +1,34 @@
+<preaggdatacheck>
+    <latestpreaggdate2>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>select case when DATE_PART('day', now()::timestamp - (select max(data_date)::timestamp from data.processed_data where data_type like %pre_aggregates%)) > 30 then 'true' else 'false' end as test;</sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+            <test>$out.get(0).get(0)</test>
+        </output_parameters>
+    </latestpreaggdate2>
+    <split>
+        <when>Parameter with name equal to test and value equal to 'true'</when>
+        <task>preaggdataNOTfound</task>
+    </split>
+    <preaggdataNOTfound>
+        <input_parameters>
+            <command>echo "Preaggregates data is more than 30 days old, please advice BI team t produce new data" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA PREAGG CHECK" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </preaggdataNOTfound>
+</preaggdatacheck>

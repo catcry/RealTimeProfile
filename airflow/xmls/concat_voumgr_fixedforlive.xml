@@ -1,0 +1,77 @@
+<concat_voumgr_fixedforlive>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "Run started" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA concat voumgr node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+    <movedelayedfiles>
+        <input_parameters>
+            <command>bash $rtdmed1path/movelatefilesback.sh $rtdmed1path `date --date="today" + "%Y%m%d"` `date --date="yesterday" + "%Y%m%d"`</command>
+            <host>$rtdmed1host</host>
+            <identity></identity>
+            <password>$rtdmed1pass</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$rtdmed1user</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </movedelayedfiles>
+    <Split>
+        <when>Parameter with name equal to exitstatus and int value greater than 0</when>
+        <task>Fault</task>
+    </Split>
+    <Fault>
+        <Fault_message>error in the move</Fault_message>
+    </Fault>
+    <movedelayedfiles>
+        <input_parameters>
+            <command>bash $rtdmed1path/cat_vou_mgr_paramterized.sh $rtdmed1path $rtdmed1path `date --date="yesterday" + "%Y%m%d"`</command>
+            <host>$rtdmed1host</host>
+            <identity></identity>
+            <password>$rtdmed1pass</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$rtdmed1user</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </movedelayedfiles>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "Run finished" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA concat voumgr node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+</concat_voumgr_fixedforlive>

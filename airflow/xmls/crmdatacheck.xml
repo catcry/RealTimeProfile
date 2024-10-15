@@ -1,0 +1,94 @@
+<crmdatacheck>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "run started" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA check crm node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+    <listnumberofcrmfiles>
+        <input_parameters>
+            <command>ls /backup/TO_FAA/input/ | grep RTD_CUST | wc -l</command>
+            <host>$rtdmed1host</host>
+            <identity></identity>
+            <password>$rtdmed1pass</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$rtdmed1user</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </listnumberofcrmfiles>
+    <split>
+        <when>parameter with name equal to count and value equal to 'true'</when>
+        <tasks>listcrmfiles, crmdatafound</tasks>
+        <when>parameter with name equal to count and value equal to 'false'</when>
+        <tasks>crmdataNOTfound</tasks>
+    </split>
+    <crmdataNOTfound>
+        <input_parameters>
+            <command>echo "WARNING, NO CRM DATA FOUND" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA CRM CHECK" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </crmdataNOTfound>
+    <listcrmfiles>
+        <input_parameters>
+            <command>ls /backup/TO_FAA/input/ | grep RTD_CUST | tr '\n'</command>
+            <host>$rtdmed1host</host>
+            <identity></identity>
+            <password>$rtdmed1pass</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$rtdmed1user</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+            <files>$stdout</files>
+        </output_parameters>
+    </listcrmfiles>
+    <crmdatafound>
+        <input_parameters>
+            <command>echo "CRM DATA FOUND FOLLOWING FILES" $files + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA CRM CHECK" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </crmdatafound>
+</crmdatacheck>

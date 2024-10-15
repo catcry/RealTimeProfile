@@ -1,0 +1,1005 @@
+=========================
+database_loader.sh
+
+line 35 DATASTORE_SSH
+
+line 38 SCRIPT_PATH
+
+line 304     add          SCRIPT_PATH="/home/gpadmin/dataloading"
+
+
+
+===================
+load_raw_data.sh
+
+line 80     TABLE_ERROR="${TABLE}_err"         #TABLE_ERROR="${TABLE}_err"
+
+
+
+line 87     $PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"      #$PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"
+
+
+line 88     add      $PSQL_CMD "select gp_truncate_error_log('$TABLE');"
+
+
+line 110             if $DATASTORE_SSH "cat $FILE" | $UNCOMP_SOFT | sed "s,^,${BASE_FILE}${DELIMITER_SED},g"  | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS INTO $TABLE_ERROR KEEP SEGMENT REJECT LIMIT 5000;"; then               if $DATASTORE_SSH "cat $FILE" | $UNCOMP_SOFT | sed "s,^,${BASE_FILE}${DELIMITER_SED},g"  | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS SEGMENT REJECT LIMIT 5000;"; then
+
+
+line 127    $PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"    #$PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"
+
+
+
+line 135     printFunc "Checking the error table"   printFunc "Checking the error table. count of error table:"
+
+
+line 136    $PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"          #$PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"
+
+
+line 138     add        $PSQL_CMD "SELECT COUNT(*) FROM gp_read_error_log('$TABLE')"
+
+
+
+
+
+
+================
+load_raw_data_crm.sh
+
+
+
+line 81      TABLE_ERROR="${TABLE}_err"      #TABLE_ERROR="${TABLE}_err"
+
+line 88      $PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"      #$PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"
+
+line 89      add          $PSQL_CMD "select gp_truncate_error_log('$TABLE');"
+
+
+line 111           if $DATASTORE_SSH "cat $FILE" | $UNCOMP_SOFT | sed "s,^,${BASE_FILE}${DELIMITER_SED},g"  | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS INTO $TABLE_ERROR KEEP SEGMENT REJECT LIMIT 5000;"; then                        if $DATASTORE_SSH "cat $FILE" | $UNCOMP_SOFT | sed "s,^,${BASE_FILE}${DELIMITER_SED},g"  | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS SEGMENT REJECT LIMIT 5000;"; then
+
+
+line 129     $PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"      #$PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"
+
+line 137     printFunc "Checking the error table. count of errors:"    #printFunc "Checking the error table. count of errors:"
+
+line 138      $PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"                #$PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"
+
+line 139     add      $PSQL_CMD "SELECT COUNT(*) FROM gp_read_error_log('$TABLE');"
+
+
+
+
+
+==============
+load_raw_data_prod_takeup.sh
+
+line 80      TABLE_ERROR="${TABLE}_err"       #TABLE_ERROR="${TABLE}_err"
+
+
+line 87      $PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"     #$PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"
+
+
+line 88        add       $PSQL_CMD "select gp_truncate_error_log('$TABLE');"
+
+
+line 110      if $DATASTORE_SSH "unzip -p $FILE"  | dos2unix | iconv -f ARABIC -t UTF8//IGNORE | sed "s,^,${BASE_FILE}${DELIMITER_SED},g" | tr -d "$REMCHARS" | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS INTO $ERROR_TABLE KEEP SEGMENT REJECT LIMIT 5000;"; then          if $DATASTORE_SSH "unzip -p $FILE"  | dos2unix | iconv -f ARABIC -t UTF8//IGNORE | sed "s,^,${BASE_FILE}${DELIMITER_SED},g" | tr -d "$REMCHARS" | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS SEGMENT REJECT LIMIT 5000;"; then
+
+
+line 127       $PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"      #$PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"
+
+line 136       $PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"     #$PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"
+
+
+line 137       add       $PSQL_CMD "SELECT COUNT(*) FROM gp_read_error_log('$TABLE');"
+
+
+
+
+===============
+load_raw_data_portability.sh
+
+
+line 78      TABLE_ERROR="${TABLE}_err"     #ABLE_ERROR="${TABLE}_err"
+
+
+line 85      $PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"     #$PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"
+
+
+line 86        add       $PSQL_CMD "select gp_truncate_error_log('$TABLE');"
+
+
+line 108       if $DATASTORE_SSH "cat $FILE" | iconv -f ARABIC -t UTF8//IGNORE | sed "s,^,${BASE_FILE}${DELIMITER_SED},g" | tr -d "$REMCHARS" | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS INTO $TABLE_ERROR KEEP SEGMENT REJECT LIMIT 5000;"; then # UNCOMP_SOFT removed        if $DATASTORE_SSH "cat $FILE" | iconv -f ARABIC -t UTF8//IGNORE | sed "s,^,${BASE_FILE}${DELIMITER_SED},g" | tr -d "$REMCHARS" | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS SEGMENT REJECT LIMIT 5000;"; then # UNCOMP_SOFT removed
+
+
+
+line 125      $PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"     #$PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"
+
+
+
+line 134      $PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"      #$PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"
+
+
+line 135      add       $PSQL_CMD "SELECT COUNT(*) FROM gp_read_error_log('$TABLE');"
+
+
+
+
+
+
+
+
+========================
+cleanupmastercopy.sh
+
+>> old_version
+
+find /backup/TO_FAA/master_copy/ -maxdepth 1 -type d -mtime $retention_days >> /backup/TO_FAA/master_copy_cleanup_script.log
+find /backup/TO_FAA/master_copy/ -maxdepth 1 -type d -mtime $retention_days -exec rm -rf {} \;
+
+<< new_version
+
+find /backup/TO_FAA/master_copy/ -mindepth 1 -maxdepth 1 -type d -mtime $retention_days >> /backup/TO_FAA/master_copy_cleanup_script.log
+find /backup/TO_FAA/master_copy/ -mindepth 1 -maxdepth 1 -type d -mtime $retention_days -exec rm -rf {} \;
+
+
+
+
+
+
+
+
+=================================
+database_loader_lookup.sh
+
+
+>> old_version
+
+DATASTORE_SSH="ssh ccacp@10.19.129.73"
+
+<< new_version
+
+DATASTORE_SSH="ssh airflow@192.168.5.237"
+
+
+>> old_version
+
+SCRIPT_PATH=$(dirname "$(readlink -f "$0")")
+
+<< new_version
+
+
+SCRIPT_PATH="/home/gpadmin/dataloading"
+
+
+>> old_version
+
+scp .meta-data ccacp@10.19.129.74:$MASTER_COPY_PATH/.meta-data
+
+<< new_version
+
+scp .meta-data airflow@192.168.5.237:$MASTER_COPY_PATH/.meta-data
+
+
+
+>> old_version
+
+$PSQL_CMD "TRUNCATE TABLE $TABLE_ERROR;"
+
+
+<< new_version
+
+$PSQL_CMD "select gp_truncate_error_log('$TABLE');"
+
+
+
+>> old_version
+
+if $DATASTORE_SSH "cat $FILE" | sed "s,^,${BASE_FILE}${DELIMITER_SED},g" | tr -d "$REMCHARS" | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS INTO $TABLE_ERROR KEEP SEGMENT REJECT LIMIT 5000;"; then
+
+
+<< new_version
+
+if $DATASTORE_SSH "cat $FILE" | sed "s,^,${BASE_FILE}${DELIMITER_SED},g" | tr -d "$REMCHARS" | $PSQL_CMD "SET CLIENT_ENCODING TO 'utf8'; COPY $TABLE FROM stdin WITH DELIMITER AS E'$DELIMITER' NULL AS '$NULLCHAR' $PSQL_COPY_OPTIONS LOG ERRORS SEGMENT REJECT LIMIT 5000;"; then
+
+
+>> old_version
+
+$PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"
+
+<< new_version
+
+#$PSQL_CMD "VACUUM ANALYZE $TABLE_ERROR;"
+
+
+>> old_version
+
+$PSQL_CMD "SELECT relname, errmsg, count(*) FROM $TABLE_ERROR GROUP BY 1, 2 ORDER BY 1, 2;"
+
+
+<< new_version
+
+$PSQL_CMD "SELECT COUNT(*) FROM gp_read_error_log('$TABLE');"
+
+
+
+>> old_version
+
+  "RTD_LOOKUP_[0-9]*.txt"            # 11 Status/Disconnection reason lookup (new CRM)
+  "RTD_LOOKUP_OFFERING*.txt"         # 12 Product ID lookup (new CRM)
+
+
+<< new_version
+
+  "RTD_LOOKUP_[0-9]*.csv"            # 11 Status/Disconnection reason lookup (new CRM)
+  "RTD_LOOKUP_OFFERING*.csv"         # 12 Product ID lookup (new CRM)
+
+
+
+
+=================
+function data.tmp_crm_staging_new
+
+
+>> old_version
+
+ANALYZE tmp.crm_err;
+
+<< new_version
+
+--ANALYZE tmp.crm_err;
+
+
+>> old_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'crm' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(',' IN rawdata) - 1) AS source_file, * FROM tmp.crm_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'crm' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+<< new version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'crm' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(err_log.rawdata FROM 1 FOR position(';' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.cdr') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'crm' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+
+====================
+function data.tmp_cdr_staging
+
+
+>> old_version
+
+ANALYZE tmp.cdr_err;
+
+
+<< new_version
+
+--ANALYZE tmp.cdr_err;
+
+
+>> old_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'cdr' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata from 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.cdr_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'cdr' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'cdr' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(err_log.rawdata FROM 1 FOR position(';' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.cdr') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'cdr' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+=================
+function data.tmp_topup_staging
+
+
+>> old_version
+
+ANALYZE tmp.topup_err;
+
+<< new_version
+
+--ANALYZE tmp.topup_err;
+
+
+>> old_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'topup' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.topup_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'topup' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'topup' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.topup') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'topup' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+=====================================
+function data.tmp_product_takeup_staging_new
+
+
+>> old_version
+
+ANALYZE tmp.balance_transfer_err;
+
+<< new_version
+
+--ANALYZE tmp.balance_transfer_err;
+
+
+>> old_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'balance_transfer' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.balance_transfer_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'balance_transfer' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'balance_transfer' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.balance_transfer') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'balance_transfer' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+
+=======================
+function data.tmp_product_takeup_staging_new
+
+>> old_version
+
+ANALYZE tmp.product_takeup_new_err;
+
+<< new_version
+
+--ANALYZE tmp.product_takeup_new_err;
+
+
+>> old_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'product_takeup' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.product_takeup_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'product_takeup' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'product_takeup' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.product_takeup_new') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'product_takeup' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+
+
+============================
+function data.tmp_portout_ported_staging
+
+
+
+>> old_version
+
+ANALYZE tmp.portout_ported_err;
+
+<< new_version
+
+--ANALYZE tmp.portout_ported_err;
+
+
+>> old_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_ported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portout_ported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_ported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_ported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.portout_ported') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_ported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+
+==================
+function data.tmp_portout_ongoing_staging
+
+
+>> old_version
+
+ANALYZE tmp.portout_ongoing_err;
+
+<< new_version
+
+--ANALYZE tmp.portout_ongoing_err;
+
+>> old_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_ongoing' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portout_ongoing_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_ongoing' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_ongoing' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.portout_ongoing') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_ongoing' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+======================
+function data.tmp_portout_notported_staging
+
+>> old_version
+
+ANALYZE tmp.portout_notported_err;
+
+<< new_version
+
+--ANALYZE tmp.portout_notported_err;
+
+
+
+
+>> old_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_notported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portout_notported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_notported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_notported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.portout_notported') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_notported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+==================
+function data.tmp_portin_ported_staging
+
+>> old_version
+
+ANALYZE tmp.portin_ported_err;
+
+<< new_version
+
+--ANALYZE tmp.portin_ported_err;
+
+
+>> old_version
+
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_ported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portin_ported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_ported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+<< new_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_ported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.portin_ported') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_ported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+========================
+function data.tmp_portin_ongoing_staging
+
+>> old_version
+
+ANALYZE tmp.portin_ongoing_err;
+
+<< new_version
+
+--ANALYZE tmp.portin_ongoing_err;
+
+
+>> old_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_ongoing' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  from (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portin_ongoing_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_ongoing' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_ongoing' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  from (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.portin_ongoing') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_ongoing' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+==================================
+function data.tmp_portin_notported_staging
+
+>> old_version
+
+ANALYZE tmp.portin_notported_err;
+
+<< new_version
+
+--ANALYZE tmp.portin_notported_err;
+
+
+>> old_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_notported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portin_notported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_notported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_notported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+            SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.portin_notported') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_notported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+=====================
+function data.tmp_customer_care_staging
+
+>> old_version
+
+ANALYZE tmp.customer_care_err;
+
+<< new_version
+
+--ANALYZE tmp.customer_care_err;
+
+
+>> old_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'customer_care' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(',' IN rawdata) - 1) AS source_file, * FROM tmp.customer_care_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'customer_care' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'customer_care' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.customer_care') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'customer_care' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+
+
+
+
+==============================
+function data.tmp_pre_aggregates_staging
+
+>> old_version
+
+ANALYZE tmp.pre_aggregates_err;
+
+<< new_version
+
+--ANALYZE tmp.pre_aggregates_err;
+
+
+
+
+>> old_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'pre_aggregates' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.pre_aggregates_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'pre_aggregates' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+<< new_version
+
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'pre_aggregates' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+        SELECT substring(err_log.rawdata FROM 1 FOR position('|' IN err_log.rawdata) - 1) as source_file
+FROM gp_read_error_log('tmp.pre_aggregates') AS err_log
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'pre_aggregates' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+
+
+
+
+==============================
+functio data.product_bonus_new
+
+
+
+>> old_version
+
+to_timestamp(ins_timestamp, 'YYYYMMDDHH24MI') AS date_updated,
+
+to_timestamp(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDDHH24MI') AS date_inserted
+
+
+<< new_version
+
+to_timestamp(ins_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS date_updated,
+
+to_timestamp(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDD') AS date_inserted
+
+
+
+
+
+===========================================
+FUNCTION data.product_discount_new
+
+
+<< old_version
+    to_timestamp(ins_timestamp, 'YYYYMMDDHH24MI') AS date_updated,
+    CASE WHEN duration_of_pkg IS NOT NULL AND trim(duration_of_pkg) != '' THEN trim(duration_of_pkg)::double precision ELSE NULL END AS duration_of_package,
+    to_timestamp(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDDHH24MI') AS date_inserted
+
+<< new_version
+
+    to_timestamp(ins_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS date_updated,
+    CASE WHEN duration_of_pkg IS NOT NULL AND trim(duration_of_pkg) != '' THEN trim(duration_of_pkg)::double precision ELSE NULL END AS duration_of_package,
+    to_timestamp(substring(trim(source_file) FROM '[0-9].{7}'), 'YYYYMMDD') AS date_inserted
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

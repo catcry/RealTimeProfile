@@ -1,0 +1,4487 @@
+<DataLoadingMain_MCI>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "Run Dataloader started" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+    <cleanuo_setting>
+        <input_parameters>
+        </input_parameters>
+        <output_parameters>
+            <perform_cleanup>$PerformCleanup</perform_cleanup>
+        </output_parameters>
+    </cleanuo_setting>
+    <check_operator_own_name>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select * from data.check_operator_own_name($OperatorOwnName);
+            </sql>
+            <code>
+                
+--
+-- Name: check_operator_own_name(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION check_operator_own_name(operator_own_name text) RETURNS void
+    AS $$
+
+DECLARE
+
+/* SUMMARY:
+ * Checks that the global parameter 'OperatorOwnName' configured in the SL UI has been changed from default. 
+ */
+
+BEGIN
+ 
+  IF operator_own_name IS NULL OR operator_own_name = 'configure_this' THEN
+    RAISE EXCEPTION 'Change the global parameter ''OperatorOwnName'' in the Social Links UI (Workflow -> Global parameters)! It should correspond to the operator''s own network name appearing in the ''a_network'' and ''b_network'' columns in the input CDR data.';
+  END IF;
+
+END;
+
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </check_operator_own_name>
+    <Run_data_loader>
+        <input_parameters>
+            <command>$DataLoadingPath/database_loader.sh + $WORKFLOW_RUN_ID</command>
+            <host>$DataLoadingHost</host>
+            <identity></identity>
+            <password>$DataLoadingPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$DataLoadingUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </Run_data_loader>
+    <sendemail1>
+        <input_parameters>
+            <command>echo "Run Dataloader node completed for" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail1>
+    <split>
+        <when>parameter with name euqal to exitstatus and int value equal to 10</when>
+        <task>no_input_found</task>
+        <when>parameter with name euqal to exitstatus and int value equal to 11</when>
+        <task>duplicate_input</task>
+        <when>parameter with name euqal to exitstatus and int value equal to 0</when>
+        <task>other_errors</task>
+    </split>
+    <no_input_found>
+        <Fault_message>there are no files in any input dir</Fault_message>
+    </no_input_found>
+    <duplicate_input>
+        <Fault_message>there are files in both input dirs. must be in one only.</Fault_message>
+    </duplicate_input>
+    <other_errors>
+        <Fault_message>an error happened in the database_loader.sh</Fault_message>
+    </other_errors>
+    <DataLoadingCommonProlog_MCI>
+        <network_list>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.network_list($OperatorOwnName);
+                </sql>
+                <code>
+                    
+--
+-- Name: network_list(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION network_list(operator_own_name text) RETURNS void
+    AS $$
+
+DECLARE
+
+  /* SUMMARY:
+  All the subscriber in the CRM are Operators own subscribers (at least have been once)
+  */
+
+BEGIN
+ 
+  IF operator_own_name = 'configure_this' THEN
+    RAISE EXCEPTION 'Provide the operator''s own name found in the CDR data as global parameter ''OperatorOwnName''!';
+  END IF;
+
+  INSERT INTO aliases.network_list 
+  (net_name, net_description)
+  SELECT 
+    new_list.net_name,
+    new_list.net_description
+  FROM (
+    SELECT 
+      operator_own_name AS net_name,
+      'operator own net'::text AS net_description   -- Do not change this!
+  ) AS new_list
+  LEFT JOIN aliases.network_list AS old_list
+  ON new_list.net_name = old_list.net_name
+  WHERE old_list.net_name IS NULL;
+
+  ANALYZE aliases.network_list;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </network_list>
+        <tmp_crm_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_crm_staging_new($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_crm_staging_new(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_crm_staging_new(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.crm_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'crm' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(',' IN rawdata) - 1) AS source_file, * FROM tmp.crm_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'crm' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+  ANALYZE tmp.crm_new;
+
+  TRUNCATE tmp.crm_staging;
+  
+  INSERT INTO tmp.crm_staging
+  (source_file, string_id, account_doa, imsi, product_type, city, provience,
+   credit_limit, reposit_amount, mci_status_reason, status, disconnection_reason,
+   date_of_birth, gender, customer_segment, corporate_kind,
+   industry, enterprise_national_id,
+   date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file, -- Name of the flat file that uploaded to the table
+    CASE WHEN account_name IS NOT NULL AND trim(account_name) != '' THEN trim(account_name) ELSE NULL END AS string_id,
+    CASE WHEN subscriber_doa IS NOT NULL AND trim(subscriber_doa) != '' THEN to_date(trim(subscriber_doa), 'DD/MM/YYYY') ELSE NULL END AS account_doa,
+    CASE WHEN imsi IS NOT NULL AND trim(imsi) != '' THEN trim(imsi) ELSE NULL END AS imsi,
+    CASE WHEN product_type IS NOT NULL AND trim(product_type) != '' THEN trim(product_type)::integer ELSE NULL END AS product_type,
+    CASE WHEN city IS NOT NULL AND trim(city) != '' THEN trim(city) ELSE NULL END AS city,
+    CASE WHEN provience IS NOT NULL AND trim(provience) != '' THEN trim(provience) ELSE NULL END AS provience,
+    CASE WHEN credit_limit IS NOT NULL AND trim(credit_limit) != '' THEN trim(credit_limit)::double precision ELSE NULL END AS credit_limit,
+    CASE WHEN deposit_amount IS NOT NULL AND trim(deposit_amount) != '' THEN trim(deposit_amount)::double precision ELSE NULL END AS deposit_amount,
+    CASE WHEN mci_status_reason IS NOT NULL AND trim(mci_status_reason) != '' THEN trim(mci_status_reason) ELSE NULL END AS mci_status_reason,
+    CASE WHEN status IS NOT NULL AND trim(status) != '' THEN trim(status)::integer ELSE NULL END AS status,
+    CASE WHEN disconnection_reason IS NOT NULL AND trim(disconnection_reason) != '' THEN trim(disconnection_reason) ELSE NULL END AS disconnection_reason,
+    CASE WHEN date_of_birth IS NOT NULL AND trim(date_of_birth) != '' THEN to_date(trim(date_of_birth), 'DD/MM/YYYY') ELSE NULL END AS date_of_birth,
+    CASE WHEN gender IS NOT NULL AND trim(gender) != '' THEN trim(gender)::integer ELSE NULL END AS gender,
+    CASE WHEN customer_segment IS NOT NULL AND trim(customer_segment) != '' THEN trim(customer_segment) ELSE NULL END AS customer_segment,
+    CASE WHEN corporate_kind IS NOT NULL AND trim(corporate_kind) != '' THEN trim(corporate_kind) ELSE NULL END AS corporate_kind,
+    CASE WHEN industry IS NOT NULL AND trim(industry) != '' THEN trim(industry) ELSE NULL END AS industry,
+    CASE WHEN enterprise_national_id IS NOT NULL AND trim(enterprise_national_id) != '' THEN trim(enterprise_national_id) ELSE NULL END AS enterprise_national_id,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]{8}'), 'YYYYMMDD')::date AS date_inserted -- get from source_file
+  FROM (
+    SELECT 
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.crm_new
+    WHERE account_name IS NOT NULL
+    AND lower(trim(account_name)) != 'account_name'
+  ) d_new
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'RTD_CUSTPROFILE%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.crm_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, parameter1, parameter2, dataset_id)
+  SELECT 
+    CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file,
+    max(account_doa) AS max_timestamp,
+    count(*) AS rowcount,
+    count(distinct string_id) AS parameter1,  
+    -- sum(CASE WHEN payment_type = 'prepaid' AND switch_off_date IS NULL THEN 1 ELSE 0 END)::real /
+    -- sum(CASE WHEN switch_off_date IS NULL THEN 1 ELSE NULL END)::real * 100 AS parameter2,
+	sum(CASE WHEN product_type = 2 AND status IN (1, 3) THEN 1 ELSE 0 END)::real /
+	sum(CASE WHEN status IN (1, 3) THEN 1 ELSE 0 END)::real * 100 AS parameter2, -- % prepaid subscribers out of all active subscribers at the moment
+	dataset AS dataset_id
+  FROM tmp.crm_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount, parameter1, parameter2)
+  SELECT
+    dataset AS dataset_id,
+    'crm' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount,
+    count(distinct string_id) AS parameter1,
+    -- sum(CASE WHEN payment_type = 'prepaid' AND switch_off_date IS NULL THEN 1 ELSE 0 END)::real /
+	-- sum(CASE WHEN switch_off_date IS NULL THEN 1 ELSE NULL END)::real * 100 AS parameter2
+	sum(CASE WHEN product_type = 2 AND disconnection_reason IS NULL THEN 1 ELSE 0 END)::real /
+	sum(CASE WHEN disconnection_reason IS NULL THEN 1 ELSE 0 END)::real * 100 AS parameter2 -- % prepaid subscribers out of all active subscribers at the moment
+  FROM tmp.crm_staging GROUP BY date_inserted;
+
+  ANALYZE data.processed_data;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_crm_staging>
+        <aliases_string_id_crm>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_crm();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_crm(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_crm() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id 
+  (string_id, date_inserted)
+  SELECT 
+    d_new.string_id, CURRENT_DATE AS date_inserted
+  FROM (
+    SELECT d.string_id FROM tmp.crm_staging AS d where string_id IS NOT NULL GROUP BY string_id
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_crm>
+        <aliases_network_crm>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_network_crm();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_network_crm(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_network_crm() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  -- First, insert the dates when subscriptions start
+  INSERT INTO aliases.network 
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    a_new.alias_id,
+    d_new.validity,
+    3::smallint AS data_source_id, -- 1 = "cdr", 2 = "topup", 3 = "crm"
+    n_new.net_id AS net_id
+  FROM (
+    SELECT
+      a.string_id,
+      coalesce(a.account_doa, '1900-01-01'::date) AS validity -- account_doa refers to activation date of subscription
+    FROM tmp.crm_staging AS a
+    WHERE string_id IS NOT NULL 
+    GROUP BY a.string_id, validity
+  ) AS d_new
+  INNER JOIN aliases.string_id AS a_new
+  ON d_new.string_id = a_new.string_id
+  CROSS JOIN (
+    SELECT coalesce(nl.net_id, -1) AS net_id
+    FROM aliases.network_list AS nl
+    WHERE lower(nl.net_description) LIKE 'operator own net' -- these are operator's active subscribers
+    ORDER BY nl.net_id ASC LIMIT 1
+  ) AS n_new
+  LEFT JOIN aliases.network AS d_old
+  ON  a_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              3 = d_old.data_source_id
+  AND   n_new.net_id = d_old.net_id
+  WHERE d_old.alias_id IS NULL;
+
+  ANALYZE aliases.network;
+
+  -- Second, insert the dates when subscriptions ends
+  INSERT INTO aliases.network 
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    a_new.alias_id,
+    d_new.validity,
+    3::smallint AS data_source_id, -- 1 = "cdr", 2 = "topup", 3 = "crm"
+    -1 AS net_id -- network id is not known
+  FROM (
+    SELECT
+      a.string_id,
+      -- coalesce(a.switch_off_date, '1800-01-01'::date) AS validity -- switch_off_date refers to de-activation date of subscription
+	  date_inserted AS validity -- use the date from source file if it has disconnected.
+    FROM tmp.crm_staging AS a
+    WHERE string_id IS NOT NULL 
+    AND disconnection_reason IS NOT NULL -- disconnection_reason as an indicator whether it has been disconnected.
+    GROUP BY a.string_id, validity
+  ) AS d_new
+  INNER JOIN aliases.string_id AS a_new
+  ON d_new.string_id = a_new.string_id
+  LEFT JOIN aliases.network AS d_old -- If in-net validity starts at the same time AS it ends, starting date is preferred (switch on and switch off dates are equal)
+  ON  a_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              3 = d_old.data_source_id
+  AND             -1 = d_old.net_id
+  WHERE d_old.alias_id IS NULL;
+
+  ANALYZE aliases.network;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_network_crm>
+        <tmp_cdr_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_cdr_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_cdr_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_cdr_staging(dataset text) RETURNS void
+    AS $$
+
+/* SUMMARY:
+ * Insert the data into the tmp.cdr_staging table and transform the types of the fields
+ */
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.cdr_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'cdr' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata from 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.cdr_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'cdr' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+  
+  ANALYZE tmp.cdr;
+
+  TRUNCATE TABLE tmp.cdr_staging;
+
+  INSERT INTO tmp.cdr_staging
+  (source_file, a_number, b_number, a_network, b_network, call_length, call_type, 
+   call_time, a_cell_id, b_cell_id, remaining_credits, a_call_cost, termination_reason, ratt_type)
+  SELECT 
+    CASE WHEN d_new.source_file IS NOT NULL AND d_new.source_file != '' THEN trim(d_new.source_file) ELSE NULL END AS source_file,
+    -- All the rest fields are defined in the data guide. Typically very customer/data spesific in practice.
+    CASE WHEN a_number IS NOT NULL AND trim(a_number) != '' THEN trim(a_number) ELSE NULL END AS a_number,
+    CASE WHEN b_number IS NOT NULL AND trim(b_number) != '' THEN trim(b_number) ELSE NULL END AS b_number,
+    CASE WHEN a_network IS NOT NULL AND trim(a_network) != '' THEN trim(a_network) ELSE NULL END AS a_network,
+    CASE WHEN b_network IS NOT NULL AND trim(b_network) != '' THEN trim(b_network) ELSE NULL END AS b_network,
+    CASE WHEN duration IS NOT NULL AND trim(duration) != '' THEN trim(duration)::double precision ELSE NULL END AS call_length,
+    CASE WHEN type IS NOT NULL AND trim(type) != '' THEN trim(type)::integer ELSE NULL END AS call_type,
+    CASE WHEN call_time IS NOT NULL AND trim(call_time) != '' THEN (to_timestamp(trim(call_time), 'YYYY-MM-DD HH24:MI:SS')::timestamp AT TIME ZONE 'UTC') AT TIME ZONE 'Iran' ELSE NULL END AS call_time,
+    CASE WHEN a_cell_id IS NOT NULL AND trim(a_cell_id) != '' then CASE WHEN length(a_cell_id) < 20 then trim(a_cell_id)::bigint else substr(trim(a_cell_id),6)::bigint END ELSE NULL END AS a_cell_id,
+    CASE WHEN b_cell_id IS NOT NULL AND trim(b_cell_id) != '' then CASE WHEN length(b_cell_id) < 20 then trim(b_cell_id)::bigint else substr(trim(b_cell_id),6)::bigint END ELSE NULL END AS b_cell_id,     
+    --CASE WHEN a_cell_id IS NOT NULL AND trim(a_cell_id) != '' then trim(a_cell_id)::bigint ELSE NULL END AS a_cell_id, 
+    -- LZU:modified to accoutn for celid greater than bigint limit 20chars in OCS CDRs
+    --CASE WHEN b_cell_id IS NOT NULL AND trim(b_cell_id) != '' then trim(b_cell_id)::bigint ELSE NULL END AS b_cell_id,
+    CASE WHEN remaining_credits IS NOT NULL AND trim(remaining_credits) != '' THEN trim(remaining_credits)::double precision ELSE NULL END AS remaining_credits,
+    CASE WHEN a_call_cost IS NOT NULL AND trim(a_call_cost) != '' THEN trim(a_call_cost)::double precision ELSE NULL END AS a_call_cost, 
+    CASE WHEN termination_reason IS NOT NULL AND termination_reason != '' THEN trim(termination_reason) ELSE NULL END AS termination_reason,
+    CASE WHEN ratt_type IS NOT NULL AND trim(ratt_type) != '' THEN trim(ratt_type) ELSE NULL END AS ratt_type
+  FROM (
+    SELECT * FROM tmp.cdr 
+    WHERE (CASE WHEN lower(trim(a_number)) = 'a_number' then 1 ELSE 0 END + 
+           CASE WHEN lower(trim(b_number)) = 'b_number' then 1 ELSE 0 END) < 2 
+  ) AS d_new
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'FAA%'
+  ) AS d_old
+  ON d_new.source_file = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+  
+  ANALYZE tmp.cdr_staging(source_file, a_number, b_number,  a_network, b_network, call_type, call_time); --LZU: aanalyze by only the fields used in subsequent functions.. 
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, parameter1, parameter2, dataset_id)
+  SELECT 
+    case 
+      when source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file,
+    max(call_time) AS max_timestamp,
+    count(*) AS rowcount,
+    count(distinct a_number) AS parameter1,
+    sum(CASE WHEN call_type = 1 THEN call_length ELSE 0 END)::real /
+      sum(CASE WHEN call_type = 1 THEN 1 ELSE NULL END)::real AS parameter2,
+    dataset AS dataset_id
+  FROM tmp.cdr_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount, parameter1, parameter2, file_name_check)
+  SELECT 
+    dataset AS dataset_id,
+    'cdr' AS data_type,
+    call_time::date AS data_date,
+    count(*) AS rowcount,
+    count(distinct a_number) AS parameter1,
+    sum(CASE WHEN call_type = 1 THEN call_length ELSE 0 END)::real /
+      sum(CASE WHEN call_type = 1 THEN 1 ELSE NULL END)::real AS parameter2,
+    replace(substring(replace(trim(source_file)::text, '_', ' ') FROM '[^0-9]+'),' ','_') AS file_name_check
+  FROM tmp.cdr_staging
+  GROUP BY call_time::date, file_name_check;
+
+  ANALYZE data.processed_data;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_cdr_staging>
+        <network_list_cdr>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.network_list_cdr();
+                </sql>
+                <code>
+                    
+--
+-- Name: network_list_cdr(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION network_list_cdr() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+ 
+  INSERT INTO aliases.network_list (net_name)
+  SELECT d_new.net_name
+  FROM (
+    SELECT CASE
+      WHEN upper(d1.a_network) NOT IN ('MCI', 'MTN', 'RIGHTEL') THEN 'others'
+      ELSE upper(d1.a_network) END AS net_name
+    FROM tmp.cdr_staging AS d1 where d1.a_network is not null --LZU: avoid duplicate network_list due to empty a party in any cdr  
+    GROUP BY 1
+	UNION
+    SELECT CASE
+      WHEN upper(d2.b_network) NOT IN ('MCI', 'MTN', 'RIGHTEL') THEN 'others'
+      ELSE upper(d2.b_network) END AS net_name
+    FROM tmp.cdr_staging AS d2 where d2.b_network is not null --LZU: avoid duplicate network_list due to empty b party in data cdr 
+    GROUP BY 1
+  ) AS d_new -- 09-05-17 LZu: updated to suit the network encoding from EL source in MCI
+  LEFT JOIN aliases.network_list AS d_old
+  ON d_new.net_name = d_old.net_name
+  WHERE d_old.net_name IS NULL;
+
+  ANALYZE aliases.network_list;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </network_list_cdr>
+        <aliases_string_id_cdr>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_cdr();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_cdr(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_cdr() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id 
+  (string_id, date_inserted)
+  SELECT 
+    d_new.string_id, 
+    CURRENT_DATE AS date_inserted
+  FROM (
+    SELECT d1.a_number AS string_id FROM tmp.cdr_staging AS d1 WHERE a_number IS NOT NULL GROUP BY 1 UNION
+    SELECT d2.b_number AS string_id FROM tmp.cdr_staging AS d2 WHERE b_number IS NOT NULL GROUP BY 1
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_cdr>
+        <tmp_topup_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_topup_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_topup_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_topup_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.topup_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'topup' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.topup_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'topup' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+  
+  ANALYZE tmp.balance_transfer_err;
+  
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'balance_transfer' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.balance_transfer_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'balance_transfer' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+  ANALYZE tmp.topup;
+  
+  -- Filter for required fields of topup (recharge) data
+  TRUNCATE TABLE tmp.topup_prestaging;
+  
+  INSERT INTO tmp.topup_prestaging
+  (source_file, std_evt_type_id, obj_type, pri_identity, result_code, recipient_number,
+   object_type, cur_amount, recharge_amt, access_method, trade_time)
+  SELECT
+    CASE WHEN d_new.source_file IS NOT NULL AND d_new.source_file != '' THEN trim(d_new.source_file) ELSE NULL END AS source_file,
+    CASE WHEN std_evt_type_id IS NOT NULL AND std_evt_type_id != '' THEN trim(std_evt_type_id)::integer ELSE NULL END AS std_evt_type_id,
+    CASE WHEN obj_type IS NOT NULL AND obj_type != '' THEN trim(obj_type) ELSE NULL END AS obj_type,
+    CASE WHEN pri_identity IS NOT NULL AND pri_identity != '' THEN trim(pri_identity) ELSE NULL END AS pri_identity,
+    CASE WHEN result_code IS NOT NULL AND result_code != '' THEN trim(result_code)::integer ELSE NULL END AS result_code,
+    CASE WHEN recipient_number IS NOT NULL AND recipient_number != '' THEN trim(recipient_number) ELSE NULL END AS recipient_number,
+    CASE WHEN object_type1 IS NOT NULL AND object_type1 != '' THEN trim(object_type1) ELSE NULL END AS object_type,
+    CASE WHEN cur_amount1 IS NOT NULL AND cur_amount1 != '' THEN trim(cur_amount1)::double precision ELSE NULL END AS cur_amount,
+    CASE WHEN recharge_amt IS NOT NULL AND recharge_amt != '' THEN trim(recharge_amt)::double precision ELSE NULL END AS recharge_amt,
+    CASE WHEN access_method IS NOT NULL AND access_method != '' THEN trim(access_method)::integer ELSE NULL END AS access_method,
+    CASE WHEN trade_time IS NOT NULL AND trade_time != '' THEN to_timestamp(trim(trade_time), 'YYYYMMDDHH24MISS') ELSE NULL END AS trade_time
+  FROM (
+    SELECT * FROM tmp.topup
+    WHERE (CASE WHEN lower(trim(pri_identity)) = 'pri_identity' THEN 1 ELSE 0 END + 
+           CASE WHEN lower(trim(recipient_number)) = 'recipient_number' THEN 1 ELSE 0 END) < 2
+  ) AS d_new
+  LEFT JOIN (
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE '%topup%'
+  ) AS d_old
+  ON d_new.source_file = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.balance_transfer;
+
+  -- Filter for required fields of balance transfer data
+  TRUNCATE TABLE tmp.balance_transfer_prestaging;
+  INSERT INTO tmp.balance_transfer_prestaging
+  (source_file, cdr_type, status, create_date, std_evt_type_id, obj_type,
+   pri_identity, result_code, recipient_number, debit_amount,
+   current_amount, access_method, transfer_type, transfer_amt)
+  SELECT
+    CASE WHEN d_new.source_file IS NOT NULL AND d_new.source_file != '' THEN trim(d_new.source_file) ELSE NULL END AS source_file,
+    CASE WHEN cdr_type IS NOT NULL AND cdr_type != '' THEN trim(cdr_type) ELSE NULL END AS cdr_type,
+    CASE WHEN status IS NOT NULL AND status != '' THEN trim(status) ELSE NULL END AS status,
+    CASE WHEN create_date IS NOT NULL AND create_date != '' THEN (to_timestamp(trim(create_date), 'YYYYMMDDHH24MISS')::timestamp AT TIME ZONE 'UTC') AT TIME ZONE 'Iran' ELSE NULL END AS create_date,
+    CASE WHEN std_evt_type_id IS NOT NULL AND std_evt_type_id != '' THEN trim(std_evt_type_id)::integer ELSE NULL END AS std_evt_type_id,
+    CASE WHEN obj_type IS NOT NULL AND obj_type != '' THEN trim(obj_type) ELSE NULL END AS obj_type,
+    CASE WHEN pri_identity IS NOT NULL AND pri_identity != '' THEN trim(pri_identity) ELSE NULL END AS pri_identity,
+    CASE WHEN result_code IS NOT NULL AND result_code != '' THEN trim(result_code)::integer ELSE NULL END AS result_code,
+    CASE WHEN recipient_number IS NOT NULL AND recipient_number != '' THEN trim(recipient_number) ELSE NULL END AS recipient_number,
+    CASE WHEN debit_amount IS NOT NULL AND debit_amount != '' THEN trim(debit_amount)::double precision ELSE NULL END AS debit_amount,
+    CASE WHEN current_amount1 IS NOT NULL AND current_amount1 != '' THEN trim(current_amount1)::double precision ELSE NULL END AS current_amount,
+    CASE WHEN access_method IS NOT NULl AND access_method != '' THEN trim(access_method)::integer ELSE NULL END AS access_method,
+    CASE WHEN transfer_type IS NOT NULL AND transfer_type != '' THEN trim(transfer_type)::integer ELSE NULL END AS transfer_type,
+	CASE WHEN transfer_amt IS NOT NULL AND transfer_amt != '' THEN trim(transfer_amt)::double precision ELSE NULL END AS transfer_amt
+  FROM (
+    SELECT * FROM tmp.balance_transfer
+    WHERE (CASE WHEN lower(trim(pri_identity)) = 'pri_identity' THEN 1 ELSE 0 END + 
+           CASE WHEN lower(trim(recipient_number)) = 'recipient_number' THEN 1 ELSE 0 END) < 2
+  ) AS d_new
+  LEFT JOIN (
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'MGR%'
+    OR pf.source_file LIKE 'VOU%'
+  ) AS d_old
+  ON d_new.source_file = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  -- Combine recharge and balance transfer transactions into one table
+  TRUNCATE TABLE tmp.topup_staging;
+  
+  INSERT INTO tmp.topup_staging
+  (source_file, charged_id, receiving_id, credit_amount, topup_cost,
+   is_credit_transfer, topup_channel, credit_balance, topup_timestamp)
+  SELECT
+    source_file AS source_file,
+    pri_identity AS charged_id,
+    CASE WHEN recipient_number IS NOT NULL THEN recipient_number ELSE pri_identity END AS receiving_id,
+    recharge_amt AS credit_amount,
+    recharge_amt AS topup_cost,
+    0,
+    access_method AS topup_channel,
+    cur_amount AS credit_balance,
+    trade_time AS topup_timestamp
+  FROM tmp.topup_prestaging
+  WHERE (std_evt_type_id = 1302 OR std_evt_type_id = 13003 OR std_evt_type_id = 13004 ) -- changes to rules by Huawei
+    AND obj_type = 'S'
+    AND result_code = 0
+    AND object_type = 'B'
+  UNION
+  SELECT
+    source_file AS source_file,
+    CASE WHEN transfer_type = 1 THEN pri_identity ELSE recipient_number END AS charged_id,
+    CASE WHEN transfer_type = 1 THEN recipient_number ELSE pri_identity END AS receiving_id,
+    transfer_amt AS credit_amount,
+    debit_amount AS topup_cost,
+    1,
+    access_method AS topup_channel,
+    current_amount AS credit_balance,
+    create_date AS topup_timestamp
+  FROM tmp.balance_transfer_prestaging
+  WHERE cdr_type = 'N'
+    AND status = 'A'
+    AND std_evt_type_id = 13002
+    AND obj_type = 'S'
+    AND result_code = 0;
+  
+  ANALYZE tmp.topup_staging;
+  
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, parameter1, parameter2, dataset_id)
+  SELECT
+    CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file,
+    max(topup_timestamp) AS max_timestamp,
+    count(*) AS rowcount,
+    count(distinct charged_id) AS parameter1,
+    sum(CASE WHEN is_credit_transfer = 0 THEN credit_amount ELSE 0 END)::real / 
+    sum(CASE WHEN is_credit_transfer = 0 THEN 1 ELSE NULL END)::real AS parameter2,
+    dataset AS dataset_id
+  FROM tmp.topup_staging GROUP BY 1;
+  
+  ANALYZE data.processed_files;
+
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount, parameter1, parameter2)
+  SELECT 
+    dataset AS dataset_id,
+    'topup' AS data_type,
+    topup_timestamp::date AS data_date,
+    count(*) AS rowcount,
+    count(distinct charged_id) AS parameter1,
+    sum(CASE WHEN is_credit_transfer::integer = 0 THEN credit_amount ELSE 0 END)::real / 
+    sum(CASE WHEN is_credit_transfer::integer = 0 THEN 1 ELSE NULL END)::real AS parameter2
+  FROM tmp.topup_staging GROUP BY topup_timestamp::date;
+
+  ANALYZE data.processed_data;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_topup_staging>
+        <aliases_string_id_topup>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_topup();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_topup(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_topup() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id 
+  (string_id, date_inserted)
+  SELECT 
+    d_new.string_id, 
+    CURRENT_DATE AS date_inserted
+  FROM (
+    SELECT d1.charged_id AS string_id FROM tmp.topup_staging AS d1 WHERE charged_id IS NOT NULL GROUP BY 1 UNION
+    SELECT d2.receiving_id AS string_id FROM tmp.topup_staging AS d2 WHERE receiving_id IS NOT NULL GROUP BY 1
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+ 
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_topup>
+        <aliases_network_topup>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_network_topup();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_network_topup(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_network_topup() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.network 
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    a_new.alias_id, 
+    d_new.validity, 
+    2::smallint AS data_source_id, -- 1="cdr", 2="topup", 3="crm"
+    n_new.net_id AS net_id
+  FROM (
+    SELECT
+      string_id, min(validity) as validity  
+    from (
+      (select charged_id as string_id, coalesce(topup_timestamp::date, '1900-01-01'::date) AS validity FROM tmp.topup_staging where charged_id is not null)
+      union 
+      (select receiving_id as string_id , coalesce(topup_timestamp::date, '1900-01-01'::date) AS validity FROM tmp.topup_staging where receiving_id is not null)
+    ) a
+    GROUP BY string_id     -- It is assumed here that credits can be transfered only inside operator's network. Both charged and receiving are always assumed to be operator's own subs
+  ) AS d_new
+  INNER JOIN aliases.string_id AS a_new
+  ON d_new.string_id = a_new.string_id
+  CROSS JOIN (
+    SELECT coalesce(nl.net_id, -1) AS net_id
+    FROM aliases.network_list AS nl
+    WHERE lower(nl.net_description) LIKE 'operator own net'
+    ORDER BY nl.net_id ASC LIMIT 1
+  ) AS n_new
+  LEFT JOIN aliases.network AS d_old
+  ON  a_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              2 = d_old.data_source_id
+  AND n_new.net_id   = d_old.net_id
+  WHERE d_old.alias_id IS NULL;
+  
+  ANALYZE aliases.network;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_network_topup>
+        <tmp_product_takeup_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_product_takeup_staging_new($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_product_takeup_staging_new(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_product_takeup_staging_new(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.product_takeup_new_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'product_takeup' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.product_takeup_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'product_takeup' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.product_takeup_new;
+
+  TRUNCATE TABLE tmp.product_takeup_staging;
+  
+  INSERT INTO tmp.product_takeup_staging 
+  (
+    source_file,
+    string_id,
+    pkg_id,
+    pkg_start_date,
+    pkg_end_date,
+    cost,
+    action,
+    cdr_timestamp,
+    date_inserted
+  )
+  SELECT
+    d_new.source_file_edit AS source_file, -- 11-05-2017 LZu: source_file originally but this is cleaner
+    CASE WHEN msisdn IS NOT NULL AND trim(msisdn) != '' THEN trim(msisdn) ELSE NULL END AS string_id,
+    CASE WHEN pkg_id IS NOT NULL AND trim(pkg_id) != '' THEN trim(pkg_id)::integer ELSE NULL END AS pkg_id,
+    CASE
+      WHEN pkg_start_date IS NOT NULL AND trim(pkg_start_date) != '' THEN to_timestamp(trim(pkg_start_date),'YYYYMMDDHH24MISS')
+      WHEN pkg_start_date IS NULL OR trim(pkg_start_date) != '' THEN '1900-01-01'::timestamp without time zone
+      ELSE NULL -- for deactivation, start date = 1900-01-01
+    END AS pkg_start_date,
+    CASE WHEN pkg_end_date IS NOT NULL AND trim(pkg_end_date) != '' THEN to_timestamp(trim(pkg_end_date),'YYYYMMDDHH24MISS') ELSE NULL END AS pkg_end_date,
+    CASE WHEN cost IS NOT NULL AND trim(cost) != '' THEN trim(cost)::double precision ELSE NULL END AS cost,
+    CASE WHEN action IS NOT NULL AND trim(action) != '' THEN trim(action)::integer ELSE NULL END AS action,
+    CASE WHEN cdr_timestamp IS NOT NULL AND trim(cdr_timestamp) != '' THEN to_timestamp(trim(cdr_timestamp),'YYYYMMDDHH24MISS')::date ELSE NULL END AS cdr_timestamp,
+	to_timestamp(substring(trim(d_new.source_file_edit) FROM '[0-9]{8}'), 'YYYYMMDDHH24MI')::date AS date_inserted -- get from source file
+  FROM (
+    SELECT
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN TRIM(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.product_takeup_new WHERE msisdn IS NOT NULL 
+    and lower(trim(msisdn)) != 'msisdn'
+  ) d_new
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'churn_hourly%'-- 14-05-2017 LZu: suit MCI filename 
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.product_takeup_staging;
+
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT 
+    CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+    dataset AS dataset_id
+  FROM tmp.product_takeup_staging GROUP BY 1;
+  
+  ANALYZE data.processed_files;
+
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'product_takeup' AS data_type,
+    date_inserted AS data_date,
+    count(*) AS rowcount
+  FROM tmp.product_takeup_staging GROUP BY date_inserted;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_product_takeup_staging>
+        <aliases_string_id_product_takeup>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_product_takeup();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_product_takeup(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_product_takeup() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id (
+    string_id, 
+    date_inserted
+  )
+  SELECT 
+    d_new.string_id, d_new.date_inserted AS date_inserted
+  FROM (
+    SELECT d.string_id, max(date_inserted) AS date_inserted FROM tmp.product_takeup_staging AS d where string_id IS NOT NULL GROUP BY string_id
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+ 
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_product_takeup>
+        <tmp_portout_ported_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portout_ported_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portout_ported_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portout_ported_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.portout_ported_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_ported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portout_ported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_ported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.portout_ported;
+
+  TRUNCATE tmp.portout_ported_staging;
+  
+  INSERT INTO tmp.portout_ported_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file,
+    CASE WHEN por_id_number IS NOT NULL AND trim(por_id_number) != '' THEN trim(por_id_number) ELSE NULL END AS string_id,
+    -- CASE WHEN por_acc_type IS NOT NULL AND trim(por_acc_type) != '' THEN trim(por_acc_type) ELSE NULL END AS payment_type,
+    CASE WHEN por_routing IS NOT NULL AND trim(por_routing) != '' THEN trim(por_routing) ELSE NULL END AS por_routing,
+    CASE WHEN por_opd IS NOT NULL AND trim(por_opd) != '' THEN trim(por_opd) ELSE NULL END AS por_opd,
+    NULL as por_err_code,
+    'portout' AS port_direction,
+    'ported' AS port_status,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD')::date AS date_inserted -- 14-05-2017 LZu: get date inserted from filename, trim is redundant here
+  FROM (
+    SELECT
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.portout_ported
+    WHERE por_id_number IS NOT NULL
+    and lower(trim(por_id_number)) != 'poridnumber'
+  ) d_new
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PORTOUT_PORTED%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.portout_ported_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT
+    CASE
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+	dataset AS dataset_id
+  FROM tmp.portout_ported_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'portout_ported' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount
+  FROM tmp.portout_ported_staging GROUP BY date_inserted::date;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_portout_ported_staging>
+        <tmp_portout_ongoing_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portout_ongoing_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portout_ongoing_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portout_ongoing_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.portout_ongoing_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_ongoing' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portout_ongoing_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_ongoing' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.portout_ongoing;
+
+  TRUNCATE tmp.portout_ongoing_staging;
+  
+  INSERT INTO tmp.portout_ongoing_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file,
+    CASE WHEN por_id_number IS NOT NULL AND trim(por_id_number) != '' THEN trim(por_id_number) ELSE NULL END AS string_id,
+    -- CASE WHEN por_acc_type IS NOT NULL AND trim(por_acc_type) != '' THEN trim(por_acc_type) ELSE NULL END AS payment_type,
+    CASE WHEN por_routing IS NOT NULL AND trim(por_routing) != '' THEN trim(por_routing) ELSE NULL END AS por_routing,
+    CASE WHEN por_opd IS NOT NULL AND trim(por_opd) != '' THEN trim(por_opd) ELSE NULL END AS por_opd,
+    NULL as por_err_code,
+    'portout' AS port_direction,
+    'ongoing' AS port_status,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD')::date AS date_inserted -- 14-05-2017 LZu: get date inserted from filename, trim is redundant here
+  FROM (
+    SELECT 
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.portout_ongoing
+    WHERE por_id_number IS NOT NULL
+    AND lower(trim(por_id_number)) != 'por_id_number'
+  ) d_new 
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PORTOUT_ONGOING%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.portout_ongoing_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT 
+    CASE 
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+	dataset AS dataset_id
+  FROM tmp.portout_ongoing_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT 
+    dataset AS dataset_id,
+    'portout_ongoing' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount
+  FROM tmp.portout_ongoing_staging GROUP BY date_inserted::date;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_portout_ongoing_staging>
+        <tmp_portout_notported_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portout_notported_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portout_notported_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portout_notported_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.portout_notported_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portout_notported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portout_notported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portout_notported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.portout_notported;
+
+  TRUNCATE tmp.portout_notported_staging;
+  
+  INSERT INTO tmp.portout_notported_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file,
+    CASE WHEN por_id_number IS NOT NULL AND trim(por_id_number) != '' THEN trim(por_id_number) ELSE NULL END AS string_id,
+    -- CASE WHEN por_acc_type IS NOT NULL AND trim(por_acc_type) != '' THEN trim(por_acc_type) ELSE NULL END AS payment_type,
+    CASE WHEN por_routing IS NOT NULL AND trim(por_routing) != '' THEN trim(por_routing) ELSE NULL END AS por_routing,
+    CASE WHEN por_opd IS NOT NULL AND trim(por_opd) != '' THEN trim(por_opd) ELSE NULL END AS por_opd,
+    CASE WHEN por_err_code IS NOT NULL AND trim(por_err_code) != '' THEN trim(por_err_code) ELSE NULL END AS por_err_code,
+    'portout' AS port_direction,
+    'notported' AS port_status,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD')::date AS date_inserted -- 14-05-2017 LZu: get date inserted from filename, trim is redundant here
+  FROM (
+    SELECT
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    from tmp.portout_notported 
+    WHERE por_id_number IS NOT NULL
+    AND lower(trim(por_id_number)) != 'por_id_number'
+  ) d_new 
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PORTOUT_NOTPORTED%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.portout_notported_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT
+    CASE 
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+	dataset AS dataset_id
+  FROM tmp.portout_notported_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'portout_notported' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount
+  FROM tmp.portout_notported_staging GROUP BY date_inserted::date;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_portout_notported_staging>
+        <tmp_portin_ported_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portin_ported_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portin_ported_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portin_ported_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.portin_ported_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_ported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portin_ported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_ported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.portin_ported;
+
+  TRUNCATE tmp.portin_ported_staging;
+  
+  INSERT INTO tmp.portin_ported_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file,
+    CASE WHEN por_id_number IS NOT NULL AND trim(por_id_number) != '' THEN trim(por_id_number) ELSE NULL END AS string_id,
+    -- CASE WHEN por_acc_type IS NOT NULL AND trim(por_acc_type) != '' THEN trim(por_acc_type) ELSE NULL END AS payment_type,
+    CASE WHEN por_routing IS NOT NULL AND trim(por_routing) != '' THEN trim(por_routing) ELSE NULL END AS por_routing,
+    CASE WHEN por_opd IS NOT NULL AND trim(por_opd) != '' THEN trim(por_opd) ELSE NULL END AS por_opd,
+    NULL as por_err_code,
+    'portin' AS port_direction,
+    'ported' AS port_status,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD')::date AS date_inserted -- 14-05-2017 LZu: get date inserted from filename, trim is redundant here
+  FROM (
+    SELECT
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.portin_ported 
+    WHERE por_id_number IS NOT NULL
+    AND lower(trim(por_id_number)) != 'por_id_number'
+  ) d_new 
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PORTIN_PORTED%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.portin_ported_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT
+    CASE
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+	dataset AS dataset_id
+  FROM tmp.portin_ported_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'portin_ported' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount
+  FROM tmp.portin_ported_staging GROUP BY date_inserted::date;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        <tmp_portin_ongoing_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portin_ongoing_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portin_ongoing_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portin_ongoing_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.portin_ongoing_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_ongoing' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  from (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portin_ongoing_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_ongoing' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.portin_ongoing;
+
+  TRUNCATE tmp.portin_ongoing_staging;
+  
+  INSERT INTO tmp.portin_ongoing_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file,
+    CASE WHEN por_id_number IS NOT NULL AND trim(por_id_number) != '' THEN trim(por_id_number) ELSE NULL END AS string_id,
+    -- CASE WHEN por_acc_type IS NOT NULL AND trim(por_acc_type) != '' THEN trim(por_acc_type) ELSE NULL END AS payment_type,
+    CASE WHEN por_routing IS NOT NULL AND trim(por_routing) != '' THEN trim(por_routing) ELSE NULL END AS por_routing,
+    CASE WHEN por_opd IS NOT NULL AND trim(por_opd) != '' THEN trim(por_opd) ELSE NULL END AS por_opd,
+    NULL as por_err_code,
+    'portin' AS port_direction,
+    'ongoing' AS port_status,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD')::date AS date_inserted -- 14-05-2017 LZu: get date inserted from filename, trim is redundant here
+  FROM (
+    SELECT
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.portin_ongoing 
+    WHERE por_id_number IS NOT NULL
+    AND lower(trim(por_id_number)) != 'por_id_number'
+  ) d_new 
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PORTIN_ONGOING%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.portin_ongoing_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT
+    CASE
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+	dataset AS dataset_id
+  FROM tmp.portin_ongoing_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'portin_ongoing' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount
+  FROM tmp.portin_ongoing_staging GROUP BY date_inserted::date;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        <tmp_portin_notported_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portin_notported_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portin_notported_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portin_notported_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.portin_notported_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT
+    'portin_notported' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(';' IN rawdata) - 1) AS source_file, * FROM tmp.portin_notported_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'portin_notported' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+
+  ANALYZE tmp.portin_notported;
+
+  TRUNCATE tmp.portin_notported_staging;
+  
+  INSERT INTO tmp.portin_notported_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file_edit AS source_file,
+    CASE WHEN por_id_number IS NOT NULL AND trim(por_id_number) != '' THEN trim(por_id_number) ELSE NULL END AS string_id,
+    -- CASE WHEN por_acc_type IS NOT NULL AND trim(por_acc_type) != '' THEN trim(por_acc_type) ELSE NULL END AS payment_type,
+    CASE WHEN por_routing IS NOT NULL AND trim(por_routing) != '' THEN trim(por_routing) ELSE NULL END AS por_routing,
+    CASE WHEN por_opd IS NOT NULL AND trim(por_opd) != '' THEN trim(por_opd) ELSE NULL END AS por_opd,
+    CASE WHEN por_err_code IS NOT NULL AND trim(por_err_code) != '' THEN trim(por_err_code) ELSE NULL END AS por_err_code,
+    'portin' AS port_direction,
+    'notported' AS port_status,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD')::date AS date_inserted -- 14-05-2017 LZu: get date inserted from filename, trim is redundant here
+  FROM (
+    SELECT 
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.portin_notported 
+    WHERE por_id_number IS NOT NULL
+    AND lower(trim(por_id_number)) != 'por_id_number'
+  ) d_new 
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PORTIN_NOTPORTED%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+
+  ANALYZE tmp.portin_notported_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT
+    CASE 
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+	dataset AS dataset_id
+  FROM tmp.portin_notported_staging GROUP BY 1;
+
+  ANALYZE data.processed_files;
+  
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'portin_notported' AS data_type,
+    date_inserted::date AS data_date,
+	count(*) AS rowcount
+  FROM tmp.portin_notported_staging GROUP BY date_inserted::date;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_portin_notported_staging>
+        <tmp_portability_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_portability_staging();
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_portability_staging(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_portability_staging() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  TRUNCATE tmp.portability_staging;
+  
+  INSERT INTO tmp.portability_staging
+  (source_file, string_id, por_routing, por_opd, por_err_code, port_direction, port_status, date_inserted)
+  SELECT
+    d_new.source_file,
+    '98' || d_new.string_id,
+    d_new.por_routing,
+    d_new.por_opd,
+    d_new.por_err_code,
+    d_new.port_direction,
+    d_new.port_status,
+    d_new.date_inserted
+  FROM (
+    SELECT * FROM tmp.portin_ported_staging UNION
+    SELECT * FROM tmp.portin_ongoing_staging UNION
+    SELECT * FROM tmp.portin_notported_staging UNION
+    SELECT * FROM tmp.portout_ported_staging UNION
+    SELECT * FROM tmp.portout_ongoing_staging UNION
+    SELECT * FROM tmp.portout_notported_staging
+  ) d_new;
+   
+  ANALYZE tmp.portability_staging;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_portability_staging>
+        <aliases_string_id_portability>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_portability();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_portability(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_portability() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id (
+    string_id,
+    date_inserted
+  )
+  SELECT 
+    d_new.string_id, d_new.date_inserted AS date_inserted
+  FROM (
+    SELECT d.string_id, max(date_inserted) AS date_inserted FROM tmp.portability_staging AS d where string_id IS NOT NULL GROUP BY string_id
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+ 
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_portability>
+        <aliases_network_portability>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_network_portability();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_network_portability(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_network_portability() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  -- First, insert the dates when subscriptions start
+  INSERT INTO aliases.network 
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    a_new.alias_id,
+    d_new.validity,
+    4::smallint AS data_source_id, -- 1 = "cdr", 2 = "topup", 3 = "crm", 4 = "portability" -- 14-05-17 LZu: added portability as 4th option
+    n_new.net_id AS net_id
+  FROM (
+    SELECT
+      a.string_id,
+      coalesce(a.date_inserted, '1900-01-01'::date) AS validity -- 14-05-17 LZu: added succesful condition for start and end dates
+    FROM tmp.portability_staging AS a
+    WHERE string_id IS NOT NULL
+    AND port_status ='ported' -- 14-05-17 LZu: added succesful condition for start and end dates
+    AND port_direction = 'portin' -- 14-05-17 LZu: added succesful condition for start and end dates
+    GROUP BY a.string_id, validity
+  ) AS d_new
+  INNER JOIN aliases.string_id AS a_new
+  ON d_new.string_id = a_new.string_id
+  CROSS JOIN (
+    SELECT coalesce(nl.net_id, -1) AS net_id
+    FROM aliases.network_list AS nl
+    WHERE lower(nl.net_description) LIKE 'operator own net'-- 14-05-17 LZu: fixed to MCI?
+    ORDER BY nl.net_id ASC LIMIT 1
+  ) AS n_new
+  LEFT JOIN aliases.network AS d_old
+  ON  a_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              4 = d_old.data_source_id
+  AND n_new.net_id   = d_old.net_id
+  WHERE d_old.alias_id IS NULL;
+
+  ANALYZE aliases.network;
+
+
+  -- Second, insert the dates when subscriptions ends
+  INSERT INTO aliases.network 
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    a_new.alias_id,
+    d_new.validity,
+    4::smallint AS data_source_id, -- 1 = "cdr", 2 = "topup", 3 = "crm", 4 = "portability" -- 14-05-17 LZu: added portability as 4th option
+    -1 AS net_id -- network id is not known
+  FROM (
+    SELECT
+      a.string_id,
+      coalesce(a.date_inserted, '1800-01-01'::date) AS validity -- 14-05-17 LZu: added succesful condition for start and end dates
+    FROM tmp.portability_staging AS a
+    WHERE string_id IS NOT NULL 
+    AND date_inserted IS NOT NULL
+    AND port_status ='ported' -- 14-05-17 LZu: added succesful condition for start and end dates
+    AND port_direction = 'portout' -- 14-05-17 LZu: added succesful condition for start and end dates
+    GROUP BY a.string_id, validity
+  ) AS d_new
+  INNER JOIN aliases.string_id AS a_new
+  ON d_new.string_id = a_new.string_id
+  LEFT JOIN aliases.network AS d_old -- If in-net validity starts at the same time as it ends, starting date is preferred (switch on and switch off dates are equeal)
+  ON  a_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              4 = d_old.data_source_id
+  AND             -1 = d_old.net_id
+  WHERE d_old.alias_id IS NULL;
+
+  ANALYZE aliases.network;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_network_portability>
+        <tmp_customer_care_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_customer_care_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_customer_care_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_customer_care_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.customer_care_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'customer_care' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position(',' IN rawdata) - 1) AS source_file, * FROM tmp.customer_care_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'customer_care' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+  
+  ANALYZE tmp.customer_care;
+
+  TRUNCATE TABLE tmp.customer_care_staging;
+  
+  INSERT INTO tmp.customer_care_staging 
+  (
+    source_file,
+    sr_type_id,
+    string_id,
+    create_time,
+    archive_date,
+date_inserted
+  )
+  SELECT
+    d_new.source_file_edit AS source_file, 
+    CASE WHEN sr_type_id IS NOT NULL AND trim(sr_type_id)!='' THEN trim(sr_type_id)::integer ELSE NULL END AS sr_type_id,
+    CASE WHEN subs_number IS NOT NULL AND trim(subs_number)!='' THEN trim(subs_number) ELSE NULL END AS string_id,
+    CASE WHEN create_time IS NOT NULL AND trim(create_time)!='' THEN to_timestamp(trim(create_time), 'YYYYMMDDHH24MISS')::timestamp without time zone ELSE NULL END AS create_time,
+    CASE WHEN archive_date IS NOT NULL AND trim(archive_date)!='' THEN to_timestamp(trim(archive_date), 'YYYYMMDDHH24MISS')::timestamp without time zone ELSE NULL END AS archive_date,
+to_timestamp(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDDHH24MI') AS date_inserted -- get from source_file
+  FROM (
+    SELECT 
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.customer_care
+    WHERE subs_number IS NOT NULL
+    AND lower(trim(subs_number)) != 'subsnumber'
+  ) d_new 
+  LEFT JOIN ( -- Make sure that given data file is not yet processed
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'customer_care%'
+  ) AS d_old
+  ON d_new.source_file_edit = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+    
+  ANALYZE tmp.customer_care_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, dataset_id)
+  SELECT 
+    CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file,
+    max(date_inserted) AS max_timestamp, 
+    count(*) AS rowcount,
+dataset AS dataset_id
+  FROM tmp.customer_care_staging GROUP BY 1;
+  
+  ANALYZE data.processed_files;
+
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'customer_care' AS data_type,
+    date_inserted AS data_date,
+    count(*) AS rowcount
+  FROM tmp.customer_care_staging GROUP BY date_inserted;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_customer_care_staging>
+        <aliases_string_id_customer_care>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_customer_care();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_customer_care(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_customer_care() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id (
+    string_id, 
+    date_inserted
+  )
+  SELECT 
+    d_new.string_id, d_new.date_inserted AS date_inserted
+  FROM (
+    SELECT d.string_id, max(date_inserted) AS date_inserted FROM tmp.customer_care_staging AS d WHERE string_id IS NOT NULL GROUP BY string_id
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+ 
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_customer_care>
+        <tmp_pre_aggregates_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_pre_aggregates_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_pre_aggregates_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_pre_aggregates_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  ANALYZE tmp.pre_aggregates_err;
+
+  INSERT INTO data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  SELECT 
+    'pre_aggregates' AS data_source,
+    aa.source_file AS source_file,
+    count(*) AS rowcount
+  FROM (
+    SELECT substring(rawdata FROM 1 FOR position('|' IN rawdata) - 1) AS source_file, * FROM tmp.pre_aggregates_err
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT source_file FROM data.failed_rows_stats WHERE data_source = 'pre_aggregates' GROUP BY source_file
+  ) bb
+  ON aa.source_file = bb.source_file
+  WHERE bb.source_file IS NULL
+  GROUP BY aa.source_file;
+
+  ANALYZE data.failed_rows_stats;
+
+  
+  ANALYZE tmp.pre_aggregates;
+
+  TRUNCATE TABLE tmp.pre_aggregates_staging;
+  
+  INSERT INTO tmp.pre_aggregates_staging (
+    source_file, string_id, imei,
+    pkg_to_payg_voice, pkg_to_payg_data, roam_int_rev_to_arpu, vas_cost_to_arpu, payg_data_rev_to_arpu,
+    onnet_to_offnet_rev, arpu, is_multi_sim_phone, arpu_segment, avg_onnet_voice_min,
+    avg_offnet_voice_min, avg_nmb_sms_sent, avg_data_usage, customer_segment,
+    date_inserted
+  )
+  SELECT
+    d_new.source_file_edit AS source_file, -- Name of the flat file that uploaded to the table
+    CASE WHEN msisdn IS NOT NULL AND trim(msisdn) != '' THEN trim(msisdn) ELSE NULL END AS string_id,
+    CASE WHEN imei IS NOT NULL AND trim(imei) != '' THEN trim(imei) ELSE NULL END AS imei,
+    CASE WHEN pkg_to_payg_voice IS NOT NULL AND trim(pkg_to_payg_voice) != '' THEN trim(pkg_to_payg_voice)::double precision ELSE NULL END AS pkg_to_payg_voice,
+    CASE WHEN pkg_to_payg_data IS NOT NULL AND trim(pkg_to_payg_data) != '' THEN trim(pkg_to_payg_data)::double precision ELSE NULL END AS pkg_to_payg_data,
+    CASE WHEN roam_int_rev_to_arpu IS NOT NULL AND trim(roam_int_rev_to_arpu) != '' THEN trim(roam_int_rev_to_arpu)::double precision ELSE NULL END AS roam_int_rev_to_arpu,
+    CASE WHEN vas_cost_to_arpu IS NOT NULL AND trim(vas_cost_to_arpu) != '' THEN trim(vas_cost_to_arpu)::double precision ELSE NULL END AS vas_cost_to_arpu,
+    CASE WHEN payg_data_rev_to_arpu IS NOT NULL AND trim(payg_data_rev_to_arpu) != '' THEN trim(payg_data_rev_to_arpu)::double precision ELSE NULL END AS payg_data_rev_to_arpu,
+    CASE WHEN onnet_to_offnet_rev IS NOT NULL AND trim(onnet_to_offnet_rev) != '' THEN trim(onnet_to_offnet_rev)::double precision ELSE NULL END AS onnet_to_offnet_rev,
+    CASE WHEN arpu IS NOT NULL AND trim(arpu) != '' THEN trim(arpu)::double precision ELSE NULL END AS arpu,
+    CASE WHEN is_multi_sim_phone IS NOT NULL AND trim(is_multi_sim_phone) != '' THEN trim(is_multi_sim_phone)::integer ELSE NULL END AS is_multi_sim_phone,
+    CASE WHEN arpu_segment IS NOT NULL AND trim(arpu_segment) != '' THEN trim(arpu_segment) ELSE NULL END AS arpu_segment,
+    CASE WHEN avg_onnet_voice_min IS NOT NULL AND trim(avg_onnet_voice_min) != '' THEN trim(avg_onnet_voice_min)::double precision ELSE NULL END AS avg_onnet_voice_min,
+    CASE WHEN avg_offnet_voice_min IS NOT NULL AND trim(avg_offnet_voice_min) != '' THEN trim(avg_offnet_voice_min)::double precision ELSE NULL END AS avg_offnet_voice_min,
+    CASE WHEN avg_nmb_sms_sent IS NOT NULL AND trim(avg_nmb_sms_sent) != '' THEN trim(avg_nmb_sms_sent)::double precision ELSE NULL END AS avg_nmb_sms_sent,
+    CASE WHEN avg_data_usage IS NOT NULL AND trim(avg_data_usage) != '' THEN trim(avg_data_usage)::double precision ELSE NULL END AS avg_data_usage,
+    CASE WHEN customer_segment IS NOT NULL AND trim(customer_segment) != '' THEN trim(customer_segment) ELSE NULL END AS customer_segment,
+    to_date(substring(trim(d_new.source_file_edit) FROM '[0-9]+'), 'YYYYMMDD') AS date_inserted -- get from source_file
+  FROM (
+    SELECT 
+      *,
+      CASE WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL END AS source_file_edit  
+    FROM tmp.pre_aggregates
+    WHERE msisdn IS NOT NULL
+    AND lower(trim(msisdn)) NOT LIKE 'msisdn'
+  ) d_new
+  LEFT JOIN (
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE 'PRE_AGGREGATES%'
+  ) AS d_old
+  ON d_new.source_file = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+ 
+  ANALYZE tmp.pre_aggregates_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, parameter1, parameter2, dataset_id)
+  SELECT
+    CASE 
+      WHEN source_file IS NOT NULL AND source_file != '' THEN trim(source_file) ELSE NULL 
+    END AS source_file,
+    max(date_inserted) AS max_timestamp,
+    count(*) AS rowcount,
+    count(distinct string_id) AS parameter1, -- simply put
+    NULL AS parameter2, -- count(distinct manufacturer_code) AS parameter2, -- simply put
+    dataset AS dataset_id
+  FROM tmp.pre_aggregates_staging GROUP BY 1;
+  
+  ANALYZE data.processed_files;
+
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT
+    dataset AS dataset_id,
+    'pre_aggregates' AS data_type,
+    date_inserted AS data_date,
+    count(*) AS rowcount
+  FROM tmp.pre_aggregates_staging GROUP BY date_inserted;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_pre_aggregates_staging>
+        <aliases_string_id_pre_aggregates>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_string_id_pre_aggregates();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_string_id_pre_aggregates(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_string_id_pre_aggregates() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.string_id (
+    string_id, 
+    date_inserted
+  )
+  SELECT 
+    d_new.string_id, d_new.date_inserted AS date_inserted
+  FROM (
+    SELECT d.string_id, max(date_inserted) AS date_inserted FROM tmp.pre_aggregates_staging AS d WHERE string_id IS NOT NULL GROUP BY string_id
+  ) AS d_new
+  LEFT JOIN aliases.string_id AS d_old
+  ON d_new.string_id = d_old.string_id
+  WHERE d_old.string_id IS NULL;
+ 
+  ANALYZE aliases.string_id;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_string_id_pre_aggregates>
+    </DataLoadingCommonProlog_MCI>
+    <sendemail2>
+        <input_parameters>
+            <command>echo "commonprolog finished" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail2>
+    <DataLoading_CRM_MCI>
+        <create_crm_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_crm_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_crm_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_crm_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for CRM tables based on the contents of tmp.crm_staging. 
+ * The partitioned tables are: 
+ * - data.crm
+ * - data.in_crm
+ *
+ * VERSION
+ * 03.04.2013 HMa
+ * 03.11.2017 ZY Modified for MCI's CRM table structure.
+ */
+DECLARE
+
+  datelist           date[];
+  date_inserted_list date[];
+
+  clevel             integer;
+  clup               boolean;
+  d                  record;
+
+BEGIN
+
+  -- Find the timestamps that are found in tmp.crm_staging:
+  datelist := ARRAY(SELECT date_inserted::date AS data_date FROM tmp.crm_staging GROUP BY data_date);
+  -- Find the date inserted values: 
+  date_inserted_list := ARRAY(SELECT distinct max(account_doa) + 1 FROM tmp.crm_staging GROUP BY source_file);
+
+  -- data.crm --
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.crm'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT distinct s.data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.crm') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.crm', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.crm '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+  -- data.in_crm -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.in_crm'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT distinct s.data_date
+    FROM (SELECT unnest(date_inserted_list) AS data_date GROUP BY 1) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.in_crm') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.in_crm', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.in_crm '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </create_crm_partitions>
+        <data_crm>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.crm_new();
+                </sql>
+                <code>
+                    
+--
+-- Name: crm_new(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION crm_new() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.crm_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+  
+  INSERT INTO data.crm
+  (
+   source_file, alias_id, switch_on_date, imsi, imei, payment_type, city, provience,
+   credit_limit, deposit_amount, status_reason, ret_date, status, disconnection_reason,
+   birth_date, gender, customer_segment, corporate_kind, job_type, priority,
+   special_segments, b2b_service_subscription, company_type, b2b_segments, industry, enterprise_national_id,
+   date_inserted
+  )
+  SELECT
+    a.source_file,
+    b.alias_id,
+    -- All the rest fields are defined in the data guide.
+    a.account_doa,
+    a.imsi,
+    a.equipment_id,
+    CASE WHEN a.product_type = 1 THEN 'postpaid' WHEN a.product_type = 2 THEN 'prepaid' ELSE NULL END,
+    a.city,
+    a.provience,
+    a.credit_limit,
+    a.reposit_amount,
+    a.mci_status_reason,
+    a.ret_date,
+    CASE WHEN a.status = 1 THEN 'Idle' WHEN a.status = 2 THEN 'Active' WHEN a.status = 3 THEN 'Outgoing Barred' WHEN a.status = 4 THEN 'Suspended' WHEN a.status = 8 THEN 'Pre-deactivated' WHEN a.status = 9 THEN 'Disconnected' ELSE NULL END,
+    a.disconnection_reason,
+    a.date_of_birth,
+    CASE WHEN a.gender = 1 THEN 'Male' WHEN a.gender = 2 THEN 'Female' ELSE NULL END,
+    a.customer_segment,
+    a.corporate_kind,
+    a.job_type,
+    a.priority,
+    a.special_segments,
+    a.b2b_service_subscription,
+    a.company_type,
+    a.b2b_segments,
+    a.industry,
+    a.enterprise_national_id,
+    a.date_inserted
+  FROM tmp.crm_staging AS a
+  INNER JOIN aliases.string_id AS b
+  ON a.string_id = b.string_id
+  WHERE a.date_inserted IS NOT NULL;
+
+  ANALYZE data.crm;
+
+  -- HW:
+  -- Note: The next INSERT should fail when a duplicate value for
+  -- date_inserted is created. Therefore there is no
+  -- LEFT JOIN data.crm_snapshot_date_inserted_mapping AS d_old
+  -- ON d_new.date_inserted = d_old.date_inserted
+  -- WHERE d_old.date_inserted IS NULL;
+  -- It should fail also for duplicate entries of snapshot_date which
+  -- the statement currently does not prevent.
+  -- But that case should not happen because the the snapshot date is
+  -- currently taken from the crm input file name and the loading
+  -- workflow does not allow to import 2 files with the having the same date
+
+  INSERT INTO data.crm_snapshot_date_inserted_mapping
+  (date_inserted, snapshot_date)
+  SELECT d_new.date_inserted, d_new.snapshot_date FROM
+  (
+    SELECT * FROM
+    (
+      SELECT source_file, date_inserted AS snapshot_date FROM tmp.crm_staging GROUP BY source_file, date_inserted
+    ) AS a1
+    INNER JOIN ( -- Take only the latest data from the data.crm table and define date_inserted date for each new CRM data batch
+        SELECT source_file, max(account_doa) + 1 AS date_inserted FROM tmp.crm_staging GROUP BY source_file
+      ) a2
+    ON a1.source_file = a2.source_file
+  ) AS d_new
+  GROUP BY date_inserted, snapshot_date;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_crm>
+        <data_in_crm>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.in_crm();
+                </sql>
+                <code>
+                    
+--
+-- Name: in_crm(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION in_crm() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.crm_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.in_crm
+  (
+   alias_id, switch_on_date, imsi, imei, payment_type, city, provience,
+   credit_limit, deposit_amount, status_reason, ret_date, status, disconnection_reason,
+   birth_date, gender, customer_segment, corporate_kind, job_type, priority,
+   special_segments, b2b_service_subscription, company_type, b2b_segments, industry, enterprise_national_id,
+   date_inserted
+  ) 
+  SELECT
+    aa.alias_id,
+    aa.switch_on_date,
+    aa.imsi,
+    aa.imei,
+    aa.payment_type,
+    aa.city,
+    aa.provience,
+    aa.credit_limit,
+    aa.deposit_amount,
+    aa.status_reason,
+    aa.ret_date,
+    aa.status,
+    aa.disconnection_reason,
+    aa.birth_date,
+    aa.gender,
+    aa.customer_segment,
+    aa.corporate_kind,
+    aa.job_type,
+    aa.priority,
+    aa.special_segments,
+    aa.b2b_service_subscription,
+    aa.company_type,
+    aa.b2b_segments,
+    aa.industry,
+    aa.enterprise_national_id,
+    aa.max_date_inserted
+  FROM (
+    SELECT 
+      b.*,
+      row_number() OVER (
+        PARTITION BY b.max_date_inserted, b.alias_id
+        ORDER BY
+          b.status,
+          coalesce(b.switch_on_date, '1900-01-01'::date) DESC  
+      ) AS rank -- This ordering (according to the available data) should guarantee only one row for each MSISDN is found from data.in_crm table
+    FROM (
+      SELECT
+        a1.*,
+        a2.max_date_inserted
+      FROM data.crm a1
+      INNER JOIN ( -- Take only the latest data from the data.crm table and Define date_inserted date for each new crm data batch
+        SELECT source_file, max(account_doa) + 1 AS max_date_inserted FROM tmp.crm_staging GROUP BY source_file
+      ) a2
+      ON a1.source_file = a2.source_file
+    ) b
+  ) aa
+  LEFT OUTER JOIN data.in_crm bb
+  ON aa.max_date_inserted = bb.date_inserted  
+  WHERE aa.rank = 1
+  AND bb.date_inserted IS NULL
+  AND aa.max_date_inserted IS NOT NULL;
+
+  ANALYZE data.in_crm;
+
+
+  INSERT INTO data.crm_statistics
+  (date_inserted, active_distinct_alias, prepaid_percentage, avg_tenure_months, new_subs_percentage)
+  SELECT 
+    a.date_inserted, 
+    count(distinct a.alias_id) AS active_distinct_alias,
+    sum(CASE WHEN a.payment_type = 'prepaid' THEN 1 ELSE 0 END)::real / count(*)::real * 100.0 AS prepaid_percentage,
+    avg(a.date_inserted::date - a.switch_on_date) / 30.0 AS avg_tenure_months,
+    avg(CASE WHEN (a.date_inserted - a.switch_on_date) <= 30.0 THEN 1 ELSE 0 END) * 100.0 AS new_subs_percentage
+  FROM (
+    SELECT * FROM data.in_crm WHERE status <> 'Disconnected'
+  ) a
+  LEFT OUTER JOIN (
+    SELECT date_inserted FROM data.crm_statistics GROUP BY date_inserted
+  ) b
+  ON a.date_inserted = b.date_inserted
+  WHERE b.date_inserted IS NULL
+  GROUP BY a.date_inserted;
+
+  ANALYZE data.crm_statistics;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_in_crm>
+    </DataLoading_CRM_MCI>
+    <sendemail3>
+        <input_parameters>
+            <command>echo "stage crm finished" + $WORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail3>
+    <DataLoadingBlacklist_MCI>
+        <tmp_blacklist_staging>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.tmp_blacklist_staging($WORKFLOW_RUN_ID);
+                </sql>
+                <code>
+                    
+--
+-- Name: tmp_blacklist_staging(text); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION tmp_blacklist_staging(dataset text) RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  analyze tmp.blacklist_err;
+
+  insert into data.failed_rows_stats
+  (data_source, source_file, rowcount)
+  select 
+    'blacklist' as data_source,
+    aa.source_file as source_file,
+    count(*) as rowcount
+  from (
+    select substring(rawdata from 1 for position('|' in rawdata)-1) as source_file, * from tmp.blacklist_err
+  ) aa
+  left outer join (
+    select source_file from data.failed_rows_stats where data_source = 'blacklist' group by source_file
+  ) bb
+  on aa.source_file = bb.source_file
+  where bb.source_file is null
+  group by aa.source_file;
+
+  analyze data.failed_rows_stats;
+
+  ANALYZE tmp.blacklist;
+
+  truncate table tmp.blacklist_staging;
+
+  INSERT INTO tmp.blacklist_staging (
+    source_file,
+    subscriber_id,
+    blacklist_id,
+    timestamp)
+  SELECT
+    nullif(trim(d_new.source_file),'') AS source_file,
+    nullif(trim(d_new.subscriber_id),'') AS subscriber_id,
+    nullif(trim(d_new.blacklist_id),'')::text AS blacklist_id,
+    to_date(nullif(trim(d_new.timestamp),''), 'YYYY-MM-DD') AS timestamp
+    from tmp.blacklist as d_new
+  LEFT JOIN (
+    SELECT pf.source_file
+    FROM data.processed_files AS pf
+    WHERE pf.source_file LIKE '%blacklist%'
+  ) AS d_old
+  ON d_new.source_file = d_old.source_file
+  WHERE d_old.source_file IS NULL;
+  
+  ANALYZE tmp.blacklist_staging;
+
+  INSERT INTO data.processed_files 
+  (source_file, max_timestamp, rowcount, parameter1, parameter2, dataset_id)
+  SELECT 
+    case 
+      when source_file is not null and source_file != '' then trim(source_file) else NULL 
+    end as source_file,
+    max(timestamp) as max_timestamp,
+    count(*) as rowcount,
+    count(distinct subscriber_id) as parameter1,
+    count(distinct blacklist_id) as parameter2,
+    dataset as dataset_id
+  FROM tmp.blacklist_staging GROUP BY 1;
+  
+  ANALYZE data.processed_files;
+
+  INSERT INTO data.processed_data 
+  (dataset_id, data_type, data_date, rowcount)
+  SELECT 
+    dataset as dataset_id,
+    'blacklist' as data_type,
+    timestamp as data_date,
+    count(*) as rowcount
+  FROM tmp.blacklist_staging GROUP BY timestamp;
+
+  ANALYZE data.processed_data;
+  
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </tmp_blacklist_staging>
+        <data_blacklist>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.blacklist();
+                </sql>
+                <code>
+                    
+--
+-- Name: blacklist(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION blacklist() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+   
+  INSERT INTO aliases.blacklist (
+    alias_id,
+    blacklist_id,
+    validity,
+    on_black_list)
+  SELECT
+    alias_id,
+    blacklist_id,
+    timestamp AS validity,
+    1 AS on_black_list 
+    FROM (
+      -- remove duplicates from input file and 
+      -- taking the maximum value of blacklist_id
+      -- in this case
+      SELECT alias_id,
+             max(blacklist_id) as blacklist_id,
+             timestamp
+      FROM tmp.blacklist_staging AS d
+      INNER JOIN aliases.string_id AS b
+      ON d.subscriber_id = b.string_id
+      GROUP BY alias_id, timestamp
+    ) u;
+  
+  /*
+     enable the feature that the blacklist
+     is empty starting from a certain date
+  */
+  INSERT INTO aliases.blacklist (
+    alias_id,
+    blacklist_id,
+    validity,
+    on_black_list)
+  SELECT 
+    -1,
+    blacklist_id,
+    timestamp AS validity,
+    1 AS on_black_list
+  FROM (
+      -- remove duplicates from input file and
+      -- taking the maximum value of blacklist_id
+      -- in this case
+      SELECT subscriber_id,
+             max(blacklist_id) as blacklist_id,
+             timestamp
+      FROM tmp.blacklist_staging AS d
+      WHERE subscriber_id = 'no_blacklist'
+      GROUP BY subscriber_id, timestamp
+  ) u;
+
+  ANALYZE aliases.blacklist;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_blacklist>
+    </DataLoadingBlacklist_MCI>
+    <DataLoadingCdrOptimized_MCI>
+        <create_cdr_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_cdr_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_cdr_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_cdr_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for CDR tables based on the contents of tmp.cdr_staging. 
+ * The partitioned tables are: 
+ * - data.cdr
+ * - data.call_types_weekly
+ * - data.in_split_weekly
+ * - data.in_split_aggregates
+ *
+ * VERSION
+ * 03.04.2013 HMa
+ */
+DECLARE
+
+  datelist  date[];
+
+  clevel    integer;
+  clup      boolean;
+  d         record;
+
+BEGIN
+
+  -- Find the dates that are found in tmp.cdr_staging:
+  datelist := ARRAY(SELECT call_time::date AS data_date FROM tmp.cdr_staging GROUP BY data_date);
+
+  -- data.cdr -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.cdr'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.cdr') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.cdr', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.cdr '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+  -- data.call_types_weekly -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.call_types_weekly'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date
+    FROM (SELECT date_trunc('week', unnest(datelist) + 2)::date - 2 AS data_date GROUP BY data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.call_types_weekly') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.call_types_weekly', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.call_types_weekly '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+  -- data.in_split_weekly --
+
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_period_tables
+  WHERE table_name = 'data.in_split_weekly'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.period
+    FROM (SELECT core.date_to_yyyyww(unnest(datelist)) AS period GROUP BY period) AS s
+    LEFT JOIN (SELECT period FROM core.partition_period_create_times WHERE table_name = 'data.in_split_weekly') AS p
+    ON s.period = p.period
+    WHERE p.period IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.period IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_period_create_times (table_name, period, time_created, cleanup)
+    VALUES ('data.in_split_weekly', d.period, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.in_split_weekly '
+         || 'ADD PARTITION "' || d.period || '" '
+         || 'START (' || d.period || ') END (' || (d.period + 1) || ') '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+  -- data.in_split_aggregates --
+
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_period_tables
+  WHERE table_name = 'data.in_split_aggregates'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.period
+    FROM (SELECT core.date_to_yyyyww(unnest(datelist)) AS period GROUP BY period) AS s
+    LEFT JOIN (SELECT period FROM core.partition_period_create_times WHERE table_name = 'data.in_split_aggregates') AS p
+    ON s.period = p.period
+    WHERE p.period IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.period IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_period_create_times (table_name, period, time_created, cleanup)
+    VALUES ('data.in_split_aggregates', d.period, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.in_split_aggregates '
+         || 'ADD PARTITION "' || d.period || '" '
+         || 'START (' || d.period || ') END (' || (d.period + 1) || ') '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </create_cdr_partitions>
+        <data_cdr>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.cdr();
+                </sql>
+                <code>
+                    
+--
+-- Name: cdr(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION cdr() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.cdr_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  SET statement_mem = '1024MB';
+  INSERT INTO data.cdr
+  (alias_a, alias_b, a_network, b_network, call_length, call_type, 
+   call_time, a_cell_id, b_cell_id, remaining_credits, a_call_cost, termination_reason,
+   ratt_type, isbusiness, ispeakvoice, ispeakdata)
+  SELECT
+    b.alias_id AS alias_a,
+    c.alias_id AS alias_b,
+    d.net_id AS a_network,
+    e.net_id AS b_network, 
+    CASE WHEN a.call_type IN (2, 4) AND a.call_length IS NULL THEN 0 ELSE a.call_length END as call_length,
+    a.call_type, -- voice calls = 1, SMS = 2, video = 3, MMS = 4, and data = 5, other =6
+    a.call_time,
+    a_cell_id,
+    b_cell_id,
+    remaining_credits,
+    a_call_cost,
+    termination_reason,
+    a.ratt_type,
+    CASE WHEN
+          (EXTRACT(HOUR FROM a.call_time) + EXTRACT(MINUTE FROM a.call_time) / 60) BETWEEN 8 AND 17
+         THEN 1
+         ELSE 0
+    END AS isbusiness,
+    CASE WHEN
+          (EXTRACT(HOUR FROM a.call_time) + EXTRACT(MINUTE FROM a.call_time) / 60) BETWEEN 7 AND 23
+         THEN 1
+         ELSE 0
+    END AS ispeakvoice,
+    CASE WHEN
+          (EXTRACT(HOUR FROM a.call_time) + EXTRACT(MINUTE FROM a.call_time) / 60) BETWEEN 2 AND 7
+         THEN 0
+         ELSE 1
+    END AS ispeakdata
+  FROM tmp.cdr_staging AS a
+  LEFT JOIN aliases.string_id AS b
+  ON a.a_number = b.string_id
+  LEFT JOIN aliases.string_id AS c
+  ON a.b_number = c.string_id
+  LEFT JOIN aliases.network_list AS d
+  ON a.a_network = d.net_name 
+  LEFT JOIN aliases.network_list AS e
+  ON a.b_network = e.net_name
+  WHERE a.call_time IS NOT NULL;
+
+  --ANALYZE data.cdr; --LZU: commented out for historic loading, bring back for production
+  perform data.analyze_data_cdr();
+  --IF nextval('tmp.analyze_counter')%4 =0 THEN -- only analyze every 4th call. 
+  --perform data.analyze_data_cdr();
+  --END IF;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_cdr>
+        <aliases_update>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select aliases.update();
+                </sql>
+                <code>
+                    
+--
+-- Name: update(); Type: FUNCTION; Schema: aliases; Owner: xsl
+--
+
+CREATE FUNCTION update() RETURNS void
+    AS $$
+
+/* SUMMARY:
+ * To be added here...
+ * HW: 2013-07-23: several lines have been commented out or replace to avoid the use of a
+ * correlated subquery, which is not compatible with greenplum version 4.0.x.
+ * These lines should be taken into use again when greenplum 
+ * on host fabric has been upgraded to version 4.2.x.
+ * All commented lines are preceeded by
+ *   -- HW: correlated subquery commented out (n)
+ * the number n indicates the number of commented out lines
+ */
+
+DECLARE
+  net_id_default integer := -1;
+  blacklist_default integer := 0;
+  validity_default date := '1800-01-01'::date;
+
+BEGIN
+
+  TRUNCATE aliases.aliases_updated;
+
+  INSERT INTO aliases.aliases_updated (
+    string_id,
+    alias_id,
+    on_black_list,
+    in_out_network,
+    net_id,
+    prev_net_id,
+    validity )
+  SELECT DISTINCT
+    d.string_id,
+    d.alias_id,
+    -- HW: correlated subquery commented out (1)
+    -- coalesce(d.on_black_list, blacklist_default),
+    blacklist_default,
+    CASE WHEN lower(coalesce(d.net_description, '')) = 'operator own net' THEN 1 ELSE 0 END AS in_out_network, 
+    coalesce(d.net_id, net_id_default),
+    coalesce(d.prev_net_id, net_id_default),
+    coalesce(d.validity, validity_default) AS validity
+  FROM (
+    SELECT
+      s.string_id,
+      s.alias_id,
+      -- HW: correlated subquery commented out
+      -- b.on_black_list,
+      n.net_name,
+      n.net_description,
+      n.net_id,
+      n.prev_net_id,
+      n.validity,
+      row_number() OVER (
+        PARTITION BY s.string_id, n.validity
+        -- HW: correlated subquery commented out and replaced (1)
+        -- ORDER BY b.validity DESC, b.on_black_list DESC, n.net_id ASC
+        ORDER BY n.net_id ASC
+      ) AS b_row_id
+    FROM aliases.string_id AS s
+    LEFT JOIN (
+      SELECT
+        nn.alias_id,
+        nl.net_name,
+        nl.net_description,
+        nn.net_id,
+        nn.prev_net_id,
+        nn.validity
+        -- HW: correlated subquery commented out
+        -- nn.max_start_date
+      FROM (
+        SELECT  -- Notice: We could prioritize different data sources here.
+          nnn.alias_id,
+          nnn.validity,
+          coalesce(nnn.net_id, net_id_default) AS net_id,
+          lag(coalesce(nnn.net_id, net_id_default), 1, net_id_default) OVER (
+            PARTITION BY nnn.alias_id 
+            ORDER BY nnn.validity ASC, nnn.data_source_id DESC
+          ) AS prev_net_id,
+          row_number() OVER (
+            PARTITION BY nnn.alias_id 
+            ORDER BY nnn.validity ASC, nnn.data_source_id DESC
+          ) AS n_row_id
+          -- HW: correlated subquery commented out
+          -- greenplum on host fabric has been updated to version 4.2.x
+          -- (SELECT  coalesce(MAX(validity), '1800-01-01'::date) as max_start_date
+          --  FROM aliases.blacklist
+          --  WHERE coalesce(nnn.validity, '2100-01-01'::date) >= coalesce(validity, '1800-01-01'::date)) AS
+          -- max_start_date
+        FROM aliases.network AS nnn
+      ) AS nn
+      LEFT JOIN aliases.network_list AS nl
+      ON nn.net_id = nl.net_id
+      WHERE nn.n_row_id = 1
+      OR nn.prev_net_id != nn.net_id
+    ) AS n
+    ON s.alias_id = n.alias_id
+    -- HW: correlated subquery commented out
+    -- LEFT JOIN aliases.blacklist AS b 
+    -- ON s.alias_id = b.alias_id
+    -- AND coalesce(b.validity, '1800-01-01'::date) = n.max_start_date
+  ) AS d 
+  WHERE d.b_row_id = 1; -- FIX ME: Black list information can only update when network information updates
+  
+  ANALYZE aliases.aliases_updated;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_update>
+    </DataLoadingCdrOptimized_MCI>
+    <sendemail4>
+        <input_parameters>
+            <command>echo "stage cdr finished" + $WORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail4>
+    <DataLoadingTopup_MCI>
+        <create_topup_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_topup_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_topup_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_topup_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for topup tables based on the contents of tmp.topup_staging. 
+ * The partitioned tables are: 
+ * - data.topup
+ *
+ * VERSION
+ * 03.04.2013 HMa
+ */
+DECLARE
+
+  datelist           date[];
+
+  clevel             integer;
+  clup               boolean;
+  d                  record;
+
+BEGIN
+
+  -- Find the timestamps that are found in tmp.crm_staging:
+  datelist := ARRAY(SELECT topup_timestamp::date AS data_date FROM tmp.topup_staging GROUP BY data_date);
+
+  -- data.topup -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.topup'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.topup') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.topup', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.topup '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+END;
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </create_topup_partitions>
+        <aliases_network_topup>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.aliases_network_topup();
+                </sql>
+                <code>
+                    
+--
+-- Name: aliases_network_topup(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION aliases_network_topup() RETURNS void
+    AS $$
+
+DECLARE
+
+BEGIN
+
+  INSERT INTO aliases.network 
+  (alias_id, validity, data_source_id, net_id)
+  SELECT
+    a_new.alias_id, 
+    d_new.validity, 
+    2::smallint AS data_source_id, -- 1="cdr", 2="topup", 3="crm"
+    n_new.net_id AS net_id
+  FROM (
+    SELECT
+      string_id, min(validity) as validity  
+    from (
+      (select charged_id as string_id, coalesce(topup_timestamp::date, '1900-01-01'::date) AS validity FROM tmp.topup_staging where charged_id is not null)
+      union 
+      (select receiving_id as string_id , coalesce(topup_timestamp::date, '1900-01-01'::date) AS validity FROM tmp.topup_staging where receiving_id is not null)
+    ) a
+    GROUP BY string_id     -- It is assumed here that credits can be transfered only inside operator's network. Both charged and receiving are always assumed to be operator's own subs
+  ) AS d_new
+  INNER JOIN aliases.string_id AS a_new
+  ON d_new.string_id = a_new.string_id
+  CROSS JOIN (
+    SELECT coalesce(nl.net_id, -1) AS net_id
+    FROM aliases.network_list AS nl
+    WHERE lower(nl.net_description) LIKE 'operator own net'
+    ORDER BY nl.net_id ASC LIMIT 1
+  ) AS n_new
+  LEFT JOIN aliases.network AS d_old
+  ON  a_new.alias_id = d_old.alias_id
+  AND d_new.validity = d_old.validity
+  AND              2 = d_old.data_source_id
+  AND n_new.net_id   = d_old.net_id
+  WHERE d_old.alias_id IS NULL;
+  
+  ANALYZE aliases.network;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </aliases_network_topup>
+        <data_topup>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.topup();
+                </sql>
+                <code>
+                    
+--
+-- Name: topup(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION topup() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.topup_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.topup 
+  (charged_id, receiving_id, credit_amount, topup_cost,
+   is_credit_transfer, channel, credit_balance, "timestamp")
+  SELECT
+    bb.alias_id AS charged_id,
+    cc.alias_id AS receiving_id,  
+    aa.credit_amount AS credit_amount,
+    aa.topup_cost AS topup_cost,
+    CASE
+      WHEN aa.is_credit_transfer IS NOT NULL AND aa.is_credit_transfer = 1 THEN TRUE
+      WHEN aa.is_credit_transfer IS NOT NULL AND aa.is_credit_transfer = 0 THEN FALSE
+      ELSE NULL
+    END AS is_credit_transfer,
+    aa.topup_channel AS channel,
+    aa.credit_balance AS credit_balance,
+    aa.topup_timestamp AS "timestamp"
+  FROM tmp.topup_staging aa
+  INNER JOIN aliases.string_id bb
+  ON aa.charged_id = bb.string_id
+  INNER JOIN aliases.string_id cc
+  ON aa.receiving_id = cc.string_id
+  WHERE aa.topup_timestamp IS NOT NULL;
+  
+  ANALYZE data.topup;
+
+
+  INSERT INTO data.topup_statistics
+  (type_of_event, period, topup_events, dis_charged,
+   dis_receiving, avg_credit_amount, avg_credit_balance)
+  SELECT
+    'Not credit transfer'::text AS type_of_event,
+    aa.period AS period,
+    count(*) AS topup_events,
+    count(distinct charged_id) AS dis_charged,
+    count(distinct receiving_id) AS dis_receiving,
+    avg(credit_amount) AS avg_credit_amount,
+    avg(credit_balance) AS avg_credit_balance
+  FROM (
+    SELECT
+      core.date_to_yyyyww(timestamp::date) AS period, 
+      * 
+    FROM (SELECT * FROM data.topup WHERE is_credit_transfer = FALSE) a, (
+      SELECT
+        CASE  -- Next Monday of the last full week of cdr-data
+          WHEN max_date = max_date_monday + 6 AND (max_date_monday + 7)::timestamp without time zone - max_time < '60 minutes'::interval THEN max_date_monday + 7
+          ELSE max_date_monday
+        END AS last_date
+      FROM (
+        SELECT
+          max(timestamp) AS max_time,
+          max(timestamp)::date AS max_date,
+          (date_trunc('week', max(timestamp)::date + interval '2 days') - interval '2 days')::date AS max_date_monday -- Iranian Monday is Saturday
+        FROM data.topup WHERE is_credit_transfer = FALSE
+      ) tmp1
+    ) b
+    WHERE a.timestamp < b.last_date
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.topup_statistics WHERE type_of_event = 'Not credit transfer'::text GROUP BY period
+  ) bb
+  ON aa.period = bb.period 
+  WHERE bb.period IS NULL
+  GROUP BY aa.period;
+
+  INSERT INTO data.topup_statistics
+  (type_of_event, period, topup_events, dis_charged,
+   dis_receiving, avg_credit_amount, avg_credit_balance)
+  SELECT
+    'Credit transfer'::text AS type_of_event,
+    aa.period AS period,
+    count(*) AS topup_events,
+    count(distinct charged_id) AS dis_charged,
+    count(distinct receiving_id) AS dis_receiving,
+    avg(credit_amount) AS avg_credit_amount,
+    avg(credit_balance) AS avg_credit_balance
+  FROM (
+    SELECT
+      core.date_to_yyyyww(timestamp::date) AS period, 
+      * 
+    FROM (SELECT * FROM data.topup WHERE is_credit_transfer = TRUE) a, (
+      SELECT
+        CASE  -- Next Monday of the last full week of cdr-data
+          WHEN max_date = max_date_monday + 6 AND (max_date_monday + 7)::timestamp without time zone - max_time < '60 minutes'::interval THEN max_date_monday + 7
+          ELSE max_date_monday 
+        END AS last_date
+      FROM (
+        SELECT
+          max(timestamp) AS max_time,
+          max(timestamp)::date AS max_date,
+          (date_trunc('week', max(timestamp)::date + interval '2 days') - interval '2 days')::date AS max_date_monday -- Iranian Monday is Saturday
+        FROM data.topup where is_credit_transfer = TRUE
+      ) tmp1
+    ) b
+    WHERE a.timestamp < b.last_date
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.topup_statistics WHERE type_of_event = 'Credit transfer'::text GROUP BY period
+  ) bb
+  ON aa.period = bb.period 
+  WHERE bb.period IS NULL
+  GROUP BY aa.period;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_topup>
+    </DataLoadingTopup_MCI>
+    <DataLoadingProductTakeup_MCI>
+        <create_product_takeup_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_product_takeup_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_product_takeup_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_product_takeup_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for product takeup tables based on the contents of tmp.product_takeup_staging. 
+ * The partitioned tables are: 
+ * - data.product_takeup
+ *
+ * VERSION
+ * 03.04.2013 HMa
+ * 14.07.2017 ZY Modified from core.create_product_partitions() for product takeup data.
+ */
+DECLARE
+
+  datelist	date[];
+
+  clevel	integer;
+  clup		boolean;
+  d			record;
+
+BEGIN
+
+  -- Find the timestamps that are found in tmp.product_takeup_staging:
+  datelist := ARRAY(SELECT date_inserted AS data_date FROM tmp.product_takeup_staging GROUP BY data_date);
+
+  -- data.product_takeup -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.product_takeup'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date AS data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.product_takeup') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.product_takeup', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.product_takeup '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly = true, compresslevel = ' || clevel || ')', '');
+  END LOOP;
+
+END;
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </create_product_takeup_partitions>
+        <data_product_takeup>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.product_takeup();
+                </sql>
+                <code>
+                    
+--
+-- Name: product_takeup(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION product_takeup() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.product_takeup_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.product_takeup (
+    source_file, alias_id, pkg_id,
+    pkg_start_date, pkg_end_date, cost, action, pkg_type,
+    date_inserted
+  )
+  SELECT
+    a.source_file, 
+    b.alias_id, 
+    a.pkg_id,
+    a.pkg_start_date,
+    a.pkg_end_date,
+	a.cost,
+	CASE WHEN a.action = 1 THEN 'Activation' WHEN a.action = 2 THEN 'Deactivation' ELSE NULL END,
+    CASE WHEN a.pkg_type = 1 THEN 'Bonus' WHEN a.pkg_type = 2 THEN 'Discount' ELSE NULL END,
+    a.date_inserted
+  FROM tmp.product_takeup_staging AS a
+  INNER JOIN aliases.string_id AS b
+  ON a.string_id = b.string_id
+  WHERE a.date_inserted IS NOT NULL;
+    
+  ANALYZE data.product_takeup;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_product_takeup>
+    </DataLoadingProductTakeup_MCI>
+    <DataLoadingPortability_MCI>
+        <create_portability_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_portability_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_portability_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_portability_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for Portability tables based on the contents of tmp.portability_staging. 
+ * The partitioned tables are: 
+ * - data.portability
+ * VERSION
+ * 14.05.2017 LZu : portability data MCI
+ */
+DECLARE
+
+  datelist           date[];
+  date_inserted_list date[];
+
+  clevel             integer;
+  clup               boolean;
+  d                  record;
+
+BEGIN
+
+  -- Find the timestamps that are found in tmp.portout_ported_staging:
+  datelist := ARRAY(SELECT date_inserted::date AS data_date FROM tmp.portability_staging GROUP BY data_date);
+  -- Find the date inserted values:
+  date_inserted_list := ARRAY(SELECT max(date_inserted) + 1 FROM tmp.portability_staging GROUP BY source_file);
+
+  -- data.portability -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.portability'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.portability') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.portability', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.portability '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || coalesce('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+END;
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </create_portability_partitions>
+        <data_portability>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.portability();
+                </sql>
+                <code>
+                    
+--
+-- Name: portability(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION portability() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.portability_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.portability (
+    source_file,
+    alias_id,
+    por_routing,
+    por_opd,
+    por_err_code,
+    port_direction,
+    port_status,
+    date_inserted
+  )
+  SELECT
+    a.source_file,
+    b.alias_id,
+    a.por_routing,
+    a.por_opd,
+    a.por_err_code,
+    a.port_direction,
+    a.port_status,
+    a.date_inserted
+  FROM tmp.portability_staging AS a
+  INNER JOIN aliases.string_id AS b
+  ON a.string_id = b.string_id
+  WHERE a.date_inserted IS NOT NULL;
+  
+  ANALYZE data.portability;  
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_portability>
+        <port_out_requests>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.port_out_requests();
+                </sql>
+                <code>
+                    
+--
+-- Name: port_out_requests(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION port_out_requests() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.portability_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.port_out_requests (
+    alias_id,
+    por_routing,
+    por_opd,
+    request_date
+  )
+  SELECT
+    new_port.alias_id,
+    new_port.por_routing,
+    new_port.por_opd,
+    new_port.date_inserted
+  FROM (
+    SELECT
+      alias_id,
+      por_routing,
+      por_opd,
+      date_inserted
+    FROM (
+      SELECT
+        *,
+        row_number() OVER (PARTITION BY alias_id ORDER BY date_inserted) AS rank,
+        (lag(date_inserted) OVER (PARTITION BY alias_id ORDER BY date_inserted))::date AS last_port_out_date
+      FROM data.portability
+      WHERE port_direction = 'portout'
+      AND port_status = 'ongoing'
+      ORDER BY alias_id, date_inserted
+    ) por
+    WHERE por.rank = 1
+    OR por.date_inserted - por.last_port_out_date::date >= interval '1 week' -- assume second time port-out request happens at least after 1 week
+  ) new_port
+  LEFT JOIN data.port_out_requests old_port
+  ON new_port.alias_id = old_port.alias_id
+  AND new_port.date_inserted = old_port.request_date
+  WHERE old_port.alias_id IS NULL
+  ;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </port_out_requests>
+    </DataLoadingPortability_MCI>
+    <DataLoaingCustomerCare_MCI>
+        <create_customer_care_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_customer_care_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_customer_care_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_customer_care_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for customer care tables based on the contents of tmp.customer_care_staging. 
+ * The partitioned tables are: 
+ * - data.customer_care
+ *
+ * VERSION
+ * 03.04.2013 HMa
+ * 17.05.2017 ZY Modified from core.create_product_partitions() for customer care data.
+ */
+DECLARE
+
+  datelist	date[];
+
+  clevel	integer;
+  clup		boolean;
+  d			record;
+
+BEGIN
+
+  -- Find the timestamps that are found in tmp.customer_care_staging:
+  datelist := ARRAY(SELECT date_inserted AS data_date FROM tmp.customer_care_staging GROUP BY data_date);
+
+  -- data.customer_care -- 
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.customer_care'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date AS data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.customer_care') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.customer_care', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.customer_care '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || coalesce('WITH (appendonly = true, compresslevel = ' || clevel || ')', '');
+  END LOOP;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </create_customer_care_partitions>
+        <data_customer_care>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.customer_care();
+                </sql>
+                <code>
+                    
+--
+-- Name: customer_care(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION customer_care() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.customer_care_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.customer_care (
+    source_file,
+    service_type,
+    alias_id,
+    date_reported,
+    date_resolved,
+    date_inserted
+  )
+  SELECT
+    a.source_file, 
+    a.sr_type_id, 
+    b.alias_id,
+    a.create_time,
+    a.archive_date,
+    a.date_inserted
+  FROM tmp.customer_care_staging AS a
+  INNER JOIN aliases.string_id AS b
+  ON a.string_id = b.string_id
+  WHERE a.date_inserted IS NOT NULL;
+    
+  ANALYZE data.customer_care;  
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+        </data_customer_care>
+    </DataLoaingCustomerCare_MCI>
+    <DataLoadingPreAggregates_MCI>
+        <create_pre_aggregates_partitions>
+            <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select core.create_pre_aggregates_partitions();
+                </sql>
+                <code>
+                    
+--
+-- Name: create_pre_aggregates_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_pre_aggregates_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for pre-aggregates tables based on the contents of tmp.pre_aggregates_staging. 
+ * The partitioned tables are:
+ * - data.pre_aggregates
+ * VERSION
+ * 14.02.2018 ZY: pre-aggregates data MCI
+ */
+DECLARE
+
+  datelist           date[];
+  date_inserted_list date[];
+
+  clevel             integer;
+  clup               boolean;
+  d                  record;
+
+BEGIN
+
+  -- Find the timestamps that are found in tmp.pre_aggregates_staging:
+  datelist := ARRAY(SELECT date_inserted::date AS data_date FROM tmp.pre_aggregates_staging GROUP BY data_date);
+  -- Find the date inserted values:
+  date_inserted_list := ARRAY(SELECT max(date_inserted) + 1 FROM tmp.pre_aggregates_staging GROUP BY source_file);
+
+  -- Read compresslevel and cleanup status: 
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.pre_aggregates'
+  INTO clevel, clup;
+
+  -- Create partitions: 
+  FOR d IN (
+    SELECT s.data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.pre_aggregates') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.pre_aggregates', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.pre_aggregates '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || coalesce('WITH (appendonly=true, compresslevel=' || clevel || ')', '');
+  END LOOP;
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+            <data_pre_aggregates>
+                <input_parameters>
+                <DataSource1>analytics</DataSource1>
+                <queryParametes></queryParametes>
+                <sql>
+                    select data.pre_aggregates();
+                </sql>
+                <code>
+                    
+--
+-- Name: pre_aggregates(); Type: FUNCTION; Schema: data; Owner: xsl
+--
+
+CREATE FUNCTION pre_aggregates() RETURNS void
+    AS $$
+
+DECLARE
+
+  is_new_data integer;
+
+BEGIN
+
+  SELECT count(*) INTO is_new_data FROM (SELECT * FROM tmp.pre_aggregates_staging LIMIT 1) tab;
+
+  -- Skip the remaining queries if there is no new data present.
+  IF is_new_data = 0 THEN
+    RAISE NOTICE 'There is no new data loaded.';
+    RETURN;
+  END IF;
+
+  INSERT INTO data.pre_aggregates
+  (
+    source_file, alias_id, imei,
+    pkg_to_payg_voice, pkg_to_payg_data, roam_int_rev_to_arpu, vas_cost_to_arpu, payg_data_rev_to_arpu,
+    onnet_to_offnet_rev, arpu, is_multi_sim_phone, arpu_segment, avg_onnet_voice_min,
+    avg_offnet_voice_min, avg_nmb_sms_sent, avg_data_usage, customer_segment,
+    date_inserted
+  )
+  SELECT
+    a.source_file,
+    b.alias_id,
+    a.imei,
+    a.pkg_to_payg_voice,
+    a.pkg_to_payg_data,
+    a.roam_int_rev_to_arpu,
+    a.vas_cost_to_arpu,
+    a.payg_data_rev_to_arpu,
+    a.onnet_to_offnet_rev,
+    a.arpu,
+    a.is_multi_sim_phone,
+    a.arpu_segment,
+    a.avg_onnet_voice_min,
+    a.avg_offnet_voice_min,
+    a.avg_nmb_sms_sent,
+    a.avg_data_usage,
+	a.customer_segment,
+    a.date_inserted
+  FROM tmp.pre_aggregates_staging AS a
+  INNER JOIN aliases.string_id AS b
+  ON a.string_id = b.string_id
+  WHERE a.date_inserted IS NOT NULL;
+
+  ANALYZE data.pre_aggregates;   
+
+END;
+
+                </code>
+            </input_parameters>
+            <output_parameters>
+                <out></out>
+            </output_parameters>
+            </data_pre_aggregates>
+        </create_pre_aggregates_partitions>
+    </DataLoadingPreAggregates_MCI>
+    <sendemail5>
+        <input_parameters>
+            <command>echo "all staging finished" + $WORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail5>
+    <Update_Aliases>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select aliases.update();
+            </sql>
+            <code>
+                
+--
+-- Name: update(); Type: FUNCTION; Schema: aliases; Owner: xsl
+--
+
+CREATE FUNCTION update() RETURNS void
+    AS $$
+
+/* SUMMARY:
+ * To be added here...
+ * HW: 2013-07-23: several lines have been commented out or replace to avoid the use of a
+ * correlated subquery, which is not compatible with greenplum version 4.0.x.
+ * These lines should be taken into use again when greenplum 
+ * on host fabric has been upgraded to version 4.2.x.
+ * All commented lines are preceeded by
+ *   -- HW: correlated subquery commented out (n)
+ * the number n indicates the number of commented out lines
+ */
+
+DECLARE
+  net_id_default integer := -1;
+  blacklist_default integer := 0;
+  validity_default date := '1800-01-01'::date;
+
+BEGIN
+
+  TRUNCATE aliases.aliases_updated;
+
+  INSERT INTO aliases.aliases_updated (
+    string_id,
+    alias_id,
+    on_black_list,
+    in_out_network,
+    net_id,
+    prev_net_id,
+    validity )
+  SELECT DISTINCT
+    d.string_id,
+    d.alias_id,
+    -- HW: correlated subquery commented out (1)
+    -- coalesce(d.on_black_list, blacklist_default),
+    blacklist_default,
+    CASE WHEN lower(coalesce(d.net_description, '')) = 'operator own net' THEN 1 ELSE 0 END AS in_out_network, 
+    coalesce(d.net_id, net_id_default),
+    coalesce(d.prev_net_id, net_id_default),
+    coalesce(d.validity, validity_default) AS validity
+  FROM (
+    SELECT
+      s.string_id,
+      s.alias_id,
+      -- HW: correlated subquery commented out
+      -- b.on_black_list,
+      n.net_name,
+      n.net_description,
+      n.net_id,
+      n.prev_net_id,
+      n.validity,
+      row_number() OVER (
+        PARTITION BY s.string_id, n.validity
+        -- HW: correlated subquery commented out and replaced (1)
+        -- ORDER BY b.validity DESC, b.on_black_list DESC, n.net_id ASC
+        ORDER BY n.net_id ASC
+      ) AS b_row_id
+    FROM aliases.string_id AS s
+    LEFT JOIN (
+      SELECT
+        nn.alias_id,
+        nl.net_name,
+        nl.net_description,
+        nn.net_id,
+        nn.prev_net_id,
+        nn.validity
+        -- HW: correlated subquery commented out
+        -- nn.max_start_date
+      FROM (
+        SELECT  -- Notice: We could prioritize different data sources here.
+          nnn.alias_id,
+          nnn.validity,
+          coalesce(nnn.net_id, net_id_default) AS net_id,
+          lag(coalesce(nnn.net_id, net_id_default), 1, net_id_default) OVER (
+            PARTITION BY nnn.alias_id 
+            ORDER BY nnn.validity ASC, nnn.data_source_id DESC
+          ) AS prev_net_id,
+          row_number() OVER (
+            PARTITION BY nnn.alias_id 
+            ORDER BY nnn.validity ASC, nnn.data_source_id DESC
+          ) AS n_row_id
+          -- HW: correlated subquery commented out
+          -- greenplum on host fabric has been updated to version 4.2.x
+          -- (SELECT  coalesce(MAX(validity), '1800-01-01'::date) as max_start_date
+          --  FROM aliases.blacklist
+          --  WHERE coalesce(nnn.validity, '2100-01-01'::date) >= coalesce(validity, '1800-01-01'::date)) AS
+          -- max_start_date
+        FROM aliases.network AS nnn
+      ) AS nn
+      LEFT JOIN aliases.network_list AS nl
+      ON nn.net_id = nl.net_id
+      WHERE nn.n_row_id = 1
+      OR nn.prev_net_id != nn.net_id
+    ) AS n
+    ON s.alias_id = n.alias_id
+    -- HW: correlated subquery commented out
+    -- LEFT JOIN aliases.blacklist AS b 
+    -- ON s.alias_id = b.alias_id
+    -- AND coalesce(b.validity, '1800-01-01'::date) = n.max_start_date
+  ) AS d 
+  WHERE d.b_row_id = 1; -- FIX ME: Black list information can only update when network information updates
+  
+  ANALYZE aliases.aliases_updated;
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </Update_Aliases>
+    <Data_Quality>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                """
+            truncate tmp.data_quality;
+
+            insert into tmp.data_quality (
+            select * from data.data_quality
+            );
+
+            truncate data.data_quality;
+
+            insert into data.data_quality (data_source, data_date, status, error_count_preloading, error_count_aggregate, error_count_other, error_count_preloading_by_row)
+            (
+            select data_type, data_date, max(status), sum(error_count_preloading), sum(error_count_aggregate), sum(error_count_other), sum(error_count_preloading_by_row)
+            from
+            (
+            (
+            select data_type, data_date, 2 as status, 0 as error_count_preloading, 0 as error_count_aggregate, 0 as error_count_other, 0 as error_count_preloading_by_row from data.processed_data where dataset_id='{{ var.value.workflow_run_id}}'
+            )
+            union all
+            (
+            select
+            data_type,
+            data_date,
+            Max(case when severity='WARNING' then 3
+            when severity='CRITICAL' then 4
+            else -1 --unknown
+            end
+            ) as status,
+            SUM( case when error_code::int between 10000 and 19999 then 1 else 0 end) as error_count_preloading,
+            SUM(case when error_code::int between 20000 and 29999 then 1 else 0 end) as error_count_aggregate,
+            SUM( case when error_code::int NOT between 10000 and 29999 then 1 else 0 end) as error_count_other,
+            (case when SUM(case when error_code::int between 10000 and 19999 then 1 else 0 end) > 0 then 1 else 0 end) as error_count_preloading_by_row
+            from tmp.validation_errors group by data_type, data_date, file_row_num
+            )
+
+            )b
+
+            group by data_type, data_date
+            );
+
+            insert into data.data_quality
+            select a.* from tmp.data_quality a
+            left outer join data.data_quality b
+            on a.data_source = b.data_source
+            and a.data_date = b.data_date
+            where b.data_source is null;
+            """
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </Data_Quality>
+    <Create_errors_partitions>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select core.create_validation_errors_partitions();
+            </sql>
+            <code>
+                
+--
+-- Name: create_validation_errors_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION create_validation_errors_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * Creates partitions for data.data_quality table
+ * VERSION
+ * 29.05.2013 Timur
+ */
+DECLARE
+
+  datelist  date[];
+
+  clevel    integer;
+  clup      boolean;
+  d         record;
+
+BEGIN
+
+  -- Find the dates that are found in tmp.validation_errors:
+  datelist := ARRAY(SELECT data_date FROM tmp.validation_errors GROUP BY data_date);
+
+  -- data.validation_errors --
+
+  -- Read compresslevel and cleanup status:
+  SELECT
+    compresslevel,
+    cleanup
+  FROM core.partition_date_tables
+  WHERE table_name = 'data.validation_errors'
+  INTO clevel, clup;
+
+  -- Create partitions:
+  FOR d IN (
+    SELECT s.data_date
+    FROM (SELECT unnest(datelist) AS data_date) AS s
+    LEFT JOIN (SELECT data_date FROM core.partition_date_create_times WHERE table_name = 'data.validation_errors') AS p
+    ON s.data_date = p.data_date
+    WHERE p.data_date IS NULL -- make sure we do not try to create partitions that already exist
+    AND s.data_date IS NOT NULL
+  )
+  LOOP
+    INSERT INTO core.partition_date_create_times (table_name, data_date, time_created, cleanup)
+    VALUES ('data.validation_errors', d.data_date, now(), clup);
+
+    EXECUTE 'ALTER TABLE data.validation_errors '
+         || 'ADD PARTITION "' || d.data_date::text || '" '
+         || 'START (''' || d.data_date || '''::date) END (''' || (d.data_date + 1) || '''::date) '
+         || COALESCE('WITH (appendonly=false)', '');
+  END LOOP;
+
+END;
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </Create_errors_partitions>
+    <validations_errors>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                """
+            -- INSERT NEW DATA
+            insert into data.validation_errors
+            (
+                data_date,
+                data_type,
+                file_short_name,
+                file_row_num,
+                file_column_num,
+                error_code,
+                error_desc,
+                file_full_row,
+                severity
+            )
+            (
+            select
+                data_date,
+                data_type,
+                file_short_name,
+                file_row_num,
+                file_column_num,
+                error_code,
+                error_desc,
+                file_full_row,
+                severity
+            from tmp.validation_errors
+            );
+            """
+            </sql>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </validations_errors>
+    <split>
+        <when>parameter with name equal to perform_cleanup and str value equal to true</when>
+        <task>clean_up_old_partitions</task>
+    </split>
+    <clean_up_old_partitions>
+        <input_parameters>
+            <DataSource1>analytics</DataSource1>
+            <queryParametes></queryParametes>
+            <sql>
+                select core.cleanup_partitions();
+            </sql>
+            <code>
+                
+--
+-- Name: cleanup_partitions(); Type: FUNCTION; Schema: core; Owner: xsl
+--
+
+CREATE FUNCTION cleanup_partitions() RETURNS void
+    AS $$
+/* SUMMARY
+ * A wrapper function that calls functions core.cleanup_date_partitions() and 
+ *
+ * VERSION
+ * 03.04.2013 HMa
+ */
+DECLARE
+
+BEGIN
+
+  EXECUTE core.cleanup_date_partitions();
+  EXECUTE core.cleanup_period_partitions();
+
+END;
+
+            </code>
+        </input_parameters>
+        <output_parameters>
+            <out></out>
+        </output_parameters>
+    </clean_up_old_partitions>
+    <sendemail6>
+        <input_parameters>
+            <command>echo "Dataloading compilited for master_copy in FAA MCI Installation" + $WORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "Fastermind MCI Dataloader node" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail6>
+</DataLoadingMain_MCI>

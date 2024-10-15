@@ -1,0 +1,15 @@
+.env/
+
+airflow/airflow.db
+
+airflow/airflow-webserver.pid
+
+/airflow/logs/
+
+airflow/couchbase.crt
+
+airflow/couchbase.pam
+
+airflow/dags/__pycache__/
+
+

@@ -1,0 +1,59 @@
+when we create the database mci_chm_gp there is already some partitions for tables.
+we can see that with this query:
+
+
+SELECT
+    inhrelid::regclass AS partition_name
+FROM
+    pg_inherits
+WHERE
+    inhparent = 'data.in_crm'::regclass
+
+
+is that ok?
+
+======================================================
+
+in core.partition_date_tables table in production there is some data but i cant find the insert statement.
+
+and i insert some data in it like mci. this is the data:
+
+data.call_types_weekly,7,180,true
+data.crm,5,180,true
+data.product_takeup,5,180,true
+data.customer_care,5,180,true
+data.pre_aggregates,5,180,true
+data.topup,7,180,true
+data.cdr,7,180,true
+data.validation_errors,7,180,true
+data.product,5,180,true
+data.portability,5,360,true
+data.in_crm,5,180,true
+
+
+is that ok?
+
+
+================================================
+
+
+in core.partition_period_tables table in production there is some data but i cant find the insert statement.
+
+and i insert some data in it like mci. this is the data:
+
+
+
+
+
+
+
+data.in_split_weekly,5,180,true
+data.in_split_aggregates,5,180,true
+
+
+is that ok?
+=======================================================
+
+
+
+

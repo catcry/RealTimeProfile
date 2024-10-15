@@ -1,0 +1,53 @@
+<cleanupmastercopy>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "Cleanup mastercopy started" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA cleanup mastercopy folder" -S smtp="mail.mci.ir:25" -S smtp-use-starttls -S wmtp-auth=login -S smtp-auth-user="churn@mci.ir" -S smtp-auth-password="CHch@4782" -S ssl-verify=ignore -S nss-config-dir="/etc/pki/nssdb" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+    <cleanupmastercopy>
+        <input_parameters>
+            <command>bash /backup/TO_FAA/cleanupmastercopy.sh</command>
+            <host>$rtdmed1host</host>
+            <identity></identity>
+            <password>$rtdmed1pass</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$rtdmed1user</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </cleanupmastercopy>
+    <sendemail0>
+        <input_parameters>
+            <command>echo "Clwanup Mastercopy finished, please see log to confirm" + $WOORKFLOW_RUN_ID | mailx -v -r "churn@mci.ir" -s "FAA cleanup mastercopy folder" -S smtp="mail.mci.ir:25" -S smtp-use-starttls -S wmtp-auth=login -S smtp-auth-user="churn@mci.ir" -S smtp-auth-password="CHch@4782" -S ssl-verify=ignore -S nss-config-dir="/etc/pki/nssdb" $emailaddress3</command>
+            <host>localhost</host>
+            <identity></identity>
+            <password>$LocalhostPassword</password>
+            <std.err.file></stderr.file>
+            <stdout.file></stdout.file>
+            <timeout>20000</timeout>
+            <username>$LocalhostUsername</username>
+        </input_parameters>
+        <output_parameters>
+            <exitstatus></exitstatus>
+            <stderr></stderr>
+            <stdout></stdout>
+        </output_parameters>
+    </sendemail0>
+</cleanupmastercopy>
