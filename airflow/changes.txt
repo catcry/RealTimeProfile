@@ -399,7 +399,7 @@ FROM gp_read_error_log('tmp.topup') AS err_log
 
 
 =====================================
-function data.tmp_product_takeup_staging_new
+function data.tmp_topup_staging
 
 
 >> old_version
@@ -991,15 +991,665 @@ FUNCTION data.product_discount_new
 
 
 
+=============================================
+FUNCTION check_ready_for_aggregation
+
+<< old_version
+
+  last_aggregated_day date default '20180105'::date; 
+
+>> new_version
+
+  last_aggregated_day date default '20241012'::date; 
+
+<< old_version 
+
+  last_aggregated_day := '20180105'::date;
+
+>> new_version
+
+  last_aggregated_day := '20241012'::date;
+
+
+
+======================================================================
+FUNCTION cdr_aggregation_validate
+
+<< old_version
+
+IF check_count_cdr_ready >= 7 THEN
+
+>> new_version
+
+IF check_count_cdr_ready >= 5 THEN
 
 
 
 
 
+==========================================================================
+FUNCTION call_types_weekly
+
+<< old_version
+
+INSERT INTO data.call_types_weekly
+  (alias_id, direction, monday, call_type, max_call_time, row_count, day_count,
+   neigh_count, sum_call_duration, sum_call_cost, cell_id_count,
+   --sum_parameter1, sum_parameter2, sum_parameter3, sum_parameter4
+   onnet_voice_min_peakhour, onnet_voice_min_offpeakhour, onnet_data_mb_peakhour, onnet_data_mb_offpeakhour,
+   voice_usage_min_businesshours, voice_usage_min_nonbusinesshours, data_usage_min_businesshours, data_usage_min_nonbusinesshours,
+   data_usage_2g, data_usage_3g, data_usage_4g)
+  SELECT
+    aa.alias_id,
+    aa.direction,
+    aa.monday,
+    aa.call_type,
+    aa.max_call_time,
+    aa.row_count,
+    aa.day_count,
+    aa.neigh_count,
+    aa.sum_call_duration,
+    aa.sum_call_cost,
+    aa.cell_id_count,
+    --aa.sum_parameter1,
+    --aa.sum_parameter2,
+    --aa.sum_parameter3,
+    --aa.sum_parameter4
+    aa.onnet_voice_min_peakhour, -- 09-05-2017 LZu: The on-net voice minutes made during peak hours  Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_voice_min_offpeakhour, -- 09-05-2017 LZu: The on-net voice minutes made during off peak hours Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_data_mb_peakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours  Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.onnet_data_mb_offpeakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours off Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.voice_usage_min_businesshours, -- 09-05-2017 LZu: voice usage (in minutes) during business hours	Business hours: 8AM-5PM inclusive
+    aa.voice_usage_min_nonbusinesshours, -- 09-05-2017 LZu: voice usage (in minutes) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_businesshours, -- 09-05-2017 LZu: data usage (in MB) during business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_nonbusinesshours, -- 09-05-2017 LZu: data usage (in MB) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_2g, -- 09-05-2017 LZu: 2G data usage in MB
+    aa.data_usage_3g, -- 09-05-2017 LZu: 3G data usage in MB
+    aa.data_usage_4g -- 09-05-2017 LZu: 4G data usage in MB
+  FROM (
+    SELECT
+      a.alias_b                             AS alias_id,
+      'r'                                   AS direction, -- received transactions
+      date_trunc('week', a.call_time + '48 hours'::interval)::date - '48 hours'::interval AS monday, -- 15-05-2017 LZu: SATURDAY
+      a.call_type                           AS call_type,
+      max(a.call_time)                      AS max_call_time,
+      count(*)                              AS row_count,
+      count(distinct a.call_time::date)     AS day_count,
+      count(distinct alias_a)               AS neigh_count,
+      count(distinct a.b_cell_id)           AS cell_id_count,
+      sum(a.call_length)                    AS sum_call_duration,
+      NULL                                  AS sum_call_cost, -- Call cost not well-defined for received calls
+      --count(distinct a_cell_id)               AS sum_parameter1, -- These sum_parameter1 are just examples. There could/should be some other aggregates as well.
+      --avg(CASE WHEN termination_reason in ('Reason 3') then 1 ELSE 0 END) AS sum_parameter2, -- This is for example a list of a abnormal termination reasons
+      --avg(call_length)                      AS sum_parameter3,  
+      --NULL                                  AS sum_parameter4 -- Does not make sense collect here caller remaining credits since it is someting that receiver is not aware of at all
+      NULL AS onnet_voice_min_peakhour,
+      NULL AS onnet_voice_min_offpeakhour,
+      NULL AS onnet_data_mb_peakhour,
+      NULL AS onnet_data_mb_offpeakhour,	  
+      NULL AS voice_usage_min_businesshours,
+      NULL AS voice_usage_min_nonbusinesshours,	  
+      NULL AS data_usage_min_businesshours,
+      NULL AS data_usage_min_nonbusinesshours,
+      NULL AS data_usage_2g,
+      NULL AS data_usage_3g,
+      NULL AS data_usage_4g	  
+    FROM tmp.cdr_full_weeks AS a
+    WHERE call_type IN (1, 2, 3, 4) -- Take only those call types that have valid receiving party
+    GROUP BY alias_id, direction, monday, call_type
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT monday FROM data.call_types_weekly WHERE direction = 'r' GROUP BY monday 
+  ) bb
+  ON aa.monday = bb.monday
+  WHERE bb.monday IS NULL;
+
+
+>> new_version
+
+INSERT INTO data.call_types_weekly
+  (alias_id, direction, monday, call_type, max_call_time, row_count, day_count,
+   neigh_count, sum_call_duration, sum_call_cost, cell_id_count,
+   --sum_parameter1, sum_parameter2, sum_parameter3, sum_parameter4
+   onnet_voice_min_peakhour, onnet_voice_min_offpeakhour, onnet_data_mb_peakhour, onnet_data_mb_offpeakhour,
+   voice_usage_min_businesshours, voice_usage_min_nonbusinesshours, data_usage_min_businesshours, data_usage_min_nonbusinesshours,
+   data_usage_2g, data_usage_3g, data_usage_4g)
+  SELECT
+    aa.alias_id,
+    aa.direction,
+    aa.monday,
+    aa.call_type,
+    aa.max_call_time,
+    aa.row_count,
+    aa.day_count,
+    aa.neigh_count,
+    aa.sum_call_duration,
+    aa.sum_call_cost,
+    aa.cell_id_count,
+    --aa.sum_parameter1,
+    --aa.sum_parameter2,
+    --aa.sum_parameter3,
+    --aa.sum_parameter4
+    aa.onnet_voice_min_peakhour, -- 09-05-2017 LZu: The on-net voice minutes made during peak hours  Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_voice_min_offpeakhour, -- 09-05-2017 LZu: The on-net voice minutes made during off peak hours Peak hours: 7AM to 11PM inclusive.
+    aa.onnet_data_mb_peakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours  Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.onnet_data_mb_offpeakhour, -- 09-05-2017 LZu: The data usage (in MB) during peak hours off Peak hours: Peak hours: 7AM to 2AM inclusive.
+    aa.voice_usage_min_businesshours, -- 09-05-2017 LZu: voice usage (in minutes) during business hours	Business hours: 8AM-5PM inclusive
+    aa.voice_usage_min_nonbusinesshours, -- 09-05-2017 LZu: voice usage (in minutes) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_businesshours, -- 09-05-2017 LZu: data usage (in MB) during business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_min_nonbusinesshours, -- 09-05-2017 LZu: data usage (in MB) during non business hours	Business hours: 8AM-5PM inclusive
+    aa.data_usage_2g, -- 09-05-2017 LZu: 2G data usage in MB
+    aa.data_usage_3g, -- 09-05-2017 LZu: 3G data usage in MB
+    aa.data_usage_4g -- 09-05-2017 LZu: 4G data usage in MB
+  FROM (
+    SELECT
+      a.alias_b                             AS alias_id,
+      'r'                                   AS direction, -- received transactions
+      date_trunc('week', a.call_time + '48 hours'::interval)::date - '48 hours'::interval AS monday, -- 15-05-2017 LZu: SATURDAY
+      a.call_type                           AS call_type,
+      max(a.call_time)                      AS max_call_time,
+      count(*)                              AS row_count,
+      count(distinct a.call_time::date)     AS day_count,
+      count(distinct alias_a)               AS neigh_count,
+      count(distinct a.b_cell_id)           AS cell_id_count,
+      sum(a.call_length)                    AS sum_call_duration,
+      NULL::double precision                AS sum_call_cost, -- Call cost not well-defined for received calls
+      --count(distinct a_cell_id)               AS sum_parameter1, -- These sum_parameter1 are just examples. There could/should be some other aggregates as well.
+      --avg(CASE WHEN termination_reason in ('Reason 3') then 1 ELSE 0 END) AS sum_parameter2, -- This is for example a list of a abnormal termination reasons
+      --avg(call_length)                      AS sum_parameter3,  
+      --NULL                                  AS sum_parameter4 -- Does not make sense collect here caller remaining credits since it is someting that receiver is not aware of at all
+      NULL::bigint AS onnet_voice_min_peakhour,
+      NULL::bigint AS onnet_voice_min_offpeakhour,
+      NULL::bigint AS onnet_data_mb_peakhour,
+      NULL::bigint AS onnet_data_mb_offpeakhour,	  
+      NULL::bigint AS voice_usage_min_businesshours,
+      NULL::bigint AS voice_usage_min_nonbusinesshours,	  
+      NULL::bigint AS data_usage_min_businesshours,
+      NULL::bigint AS data_usage_min_nonbusinesshours,
+      NULL::bigint AS data_usage_2g,
+      NULL::bigint AS data_usage_3g,
+      NULL::bigint AS data_usage_4g	  
+    FROM tmp.cdr_full_weeks AS a
+    WHERE call_type IN (1, 2, 3, 4) -- Take only those call types that have valid receiving party
+    GROUP BY alias_id, direction, monday, call_type
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT monday FROM data.call_types_weekly WHERE direction = 'r' GROUP BY monday 
+  ) bb
+  ON aa.monday = bb.monday
+  WHERE bb.monday IS NULL;
+  
 
 
 
+<< old_version
+
+  INSERT INTO data.data_usage_weekly_stats
+  (table_name, period, rowcount, dis_alias, mms_percentage, mms_avg,
+   mms_day, data_percentage, data_avg, data_day)
+  SELECT
+    'call_types_weekly'::text AS table_name,
+    aa.period,
+    count(*) AS rowcount,
+    count(distinct alias_id) AS dis_alias,
+    sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END)::real / count(distinct alias_id) * 100 as mms_percentage,
+    sum(CASE WHEN call_type = 4 THEN row_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END), 0) AS mms_avg,
+    sum(CASE WHEN call_type = 4 THEN day_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END), 0) AS mms_day,
+    sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END)::real / count(distinct alias_id) * 100 AS data_percentage,
+    sum(CASE WHEN call_type = 5 THEN row_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END), 0) AS data_avg,
+    sum(CASE WHEN call_type = 5 THEN day_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END), 0) AS data_day
+  FROM (
+    SELECT core.date_to_yyyyww(monday) AS period, * FROM data.call_types_weekly WHERE direction = 'm'
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.data_usage_weekly_stats WHERE table_name = 'call_types_weekly'::text GROUP BY period
+  ) bb
+  ON aa.period = bb.period
+  WHERE bb.period IS NULL
+  GROUP BY aa.period;
 
 
+>> new_version
+
+  INSERT INTO data.data_usage_weekly_stats
+  (table_name, period, rowcount, dis_alias, mms_percentage, mms_avg,
+   mms_day, data_percentage, data_avg, data_day)
+  SELECT
+    'call_types_weekly'::text AS table_name,
+    aa.period,
+    count(*) AS rowcount,
+    count(distinct alias_id) AS dis_alias,
+    sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END)::real / count(distinct alias_id) * 100 as mms_percentage,
+    sum(CASE WHEN call_type = 4 THEN row_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END), 0) AS mms_avg,
+    sum(CASE WHEN call_type = 4 THEN day_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 4 THEN 1 ELSE 0 END), 0) AS mms_day,
+    sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END)::real / count(distinct alias_id) * 100 AS data_percentage,
+    sum(CASE WHEN call_type = 5 THEN row_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END), 0) AS data_avg,
+    sum(CASE WHEN call_type = 5 THEN day_count ELSE 0 END)::real / nullif(sum(CASE WHEN call_type = 5 THEN 1 ELSE 0 END), 0) AS data_day
+  FROM (
+    SELECT core.date_to_yyyyww(monday) AS period, * FROM data.call_types_weekly WHERE direction = 'm'
+  ) aa
+  LEFT OUTER JOIN (
+    SELECT period FROM data.data_usage_weekly_stats WHERE table_name = 'call_types_weekly'::text GROUP BY period
+  ) bb
+  ON aa.period::integer = bb.period::integer
+  WHERE bb.period IS NULL
+  GROUP BY aa.period;
+
+
+
+====================================================================================
+FUNCTION weekly_cdr_aggregation
+
+
+<< old_version
+
+
+CREATE FUNCTION weekly_cdr_aggregates(yyyyww1 integer, yyyyww2 integer) RETURNS void
+    AS $$
+
+/* SUMMARY
+ * This function calculates aggregates from data.in_split_weekly table and inserts
+ * the results to data.in_split_aggregates table.
+ *
+ * INPUTS
+ * yyyyww1 : The first week to be processed
+ * yyyyww2 : The last week to be processed
+ *
+ * VERSION
+ * 2012-05-07 MOj - Bug 886 fixed
+ * 2011-10-13 TSi - Bug 742 fixed
+ */
+
+DECLARE
+
+  monday1 date := core.yyyyww_to_date(yyyyww1);
+  monday2 date := core.yyyyww_to_date(yyyyww2);
+  monday_list date[] := (SELECT array(SELECT monday1 + 7 * generate_series(0, (monday2 - monday1) / 7)));
+
+BEGIN
+
+  INSERT INTO data.in_split_aggregates (
+    alias_id,
+    in_out_network,
+    voicecount,
+    voicesum,
+    voicecountweekday,
+    voicesumweekday,
+    voicecountday,
+    voicesumday,
+    voicecountevening,
+    voicesumevening,
+    smscount,
+    smscountweekday,
+    smscountday,
+    smscountevening,
+    mc_alias_count,
+    rc_alias_count,
+    rc_voicecount,
+    rc_smscount,
+	data_usage_sumday,
+    data_usage_sumevening,
+    data_usage_sumweekday,
+	weekly_data_usage_sum,
+	weekly_data_usage_cost_sum,
+	weekly_cost_sum,
+    period )
+  SELECT 
+    aa.alias_id,
+    aa.in_out_network,
+    sum(aa.voicecount) AS voicecount,
+    sum(aa.voicesum) AS voicesum,
+    sum(aa.voicecountweekday) AS voicecountweekday,
+    sum(aa.voicesumweekday) AS voicesumweekday,
+    sum(aa.voicecountday) AS voicecountday,
+    sum(aa.voicesumday) AS voicesumday,
+    sum(aa.voicecountevening) AS voicecountevening,
+    sum(aa.voicesumevening) AS voicesumevening,
+    sum(aa.smscount) AS smscount,
+    sum(aa.smscountweekday) AS smscountweekday,
+    sum(aa.smscountday) AS smscountday,
+    sum(aa.smscountevening) AS smscountevening,
+    sum(aa.mc_alias_count) AS mc_alias_count,
+    sum(aa.rc_alias_count) AS rc_alias_count,
+    sum(aa.rc_voicecount) AS rc_voicecount,
+    sum(aa.rc_smscount) AS rc_smscount,
+	sum(aa.data_usage_sumday) AS data_usage_sumday,
+	sum(aa.data_usage_sumevening) AS data_usage_sumevening,
+	sum(aa.data_usage_sumweekday) AS data_usage_sumweekday,
+	sum(aa.weekly_data_usage_sum) AS weekly_data_usage_sum,
+	sum(aa.weekly_data_usage_cost_sum) AS weekly_data_usage_cost_sum,
+	sum(aa.weekly_cost_sum) AS weekly_cost_sum,
+    aa.period
+  FROM (
+    SELECT 
+      sp1.alias_a AS alias_id,
+      al1.in_out_network,
+      sum(sp1.v_c) AS voicecount,
+      sum(sp1.v_s) AS voicesum,
+      sum(sp1.v_c_week) AS voicecountweekday,
+      sum(sp1.v_s_week) AS voicesumweekday,
+      sum(sp1.v_c_day) AS voicecountday,
+      sum(sp1.v_s_day) AS voicesumday,
+      sum(sp1.v_c_eve) AS voicecountevening,
+      sum(sp1.v_s_eve) AS voicesumevening,
+      sum(sp1.sms_w/6) AS smscount,
+      sum(sp1.sms_c_week) AS smscountweekday,
+      sum(sp1.sms_c_day) AS smscountday,
+      sum(sp1.sms_c_eve) AS smscountevening,
+      count(DISTINCT sp1.alias_b) AS mc_alias_count,
+      0 AS rc_alias_count,
+      0 AS rc_voicecount,
+      0 AS rc_smscount,
+	  sum(sp1.data_usage_day) AS data_usage_sumday,
+	  sum(sp1.data_usage_eve) AS data_usage_sumevening,
+	  sum(sp1.data_usage_weekday) AS data_usage_sumweekday,
+	  sum(sp1.weekly_data_usage) AS weekly_data_usage_sum,
+	  sum(sp1.weekly_data_usage_cost) AS weekly_data_usage_cost_sum,
+	  sum(sp1.weekly_cost) AS weekly_cost_sum,
+      sp1.period
+    FROM data.in_split_weekly AS sp1
+    INNER JOIN (
+      SELECT
+        au1.alias_id,
+        weeklist1.yyyyww,
+        au1.in_out_network,
+        row_number() OVER (PARTITION BY au1.alias_id, weeklist1.yyyyww ORDER BY au1.validity DESC) AS validity_id 
+      FROM aliases.aliases_updated AS au1
+      INNER JOIN (
+        SELECT DISTINCT    
+          ml.monday,
+          core.date_to_yyyyww(ml.monday) AS yyyyww
+        FROM (
+          SELECT unnest(monday_list) AS monday
+        ) AS ml
+      ) AS weeklist1
+      ON au1.validity < weeklist1.monday + 7
+    ) AS al1
+    ON sp1.alias_b = al1.alias_id
+    AND sp1.period = al1.yyyyww
+    WHERE al1.validity_id = 1
+    GROUP BY sp1.alias_a, sp1.period, al1.in_out_network
+    UNION ALL
+    SELECT 
+      sp2.alias_b AS alias_id,
+      al2.in_out_network,
+      0 AS voicecount,
+      0 AS voicesum,
+      0 AS voicecountweekday,
+      0 AS voicesumweekday,
+      0 AS voicecountday,
+      0 AS voicesumday,
+      0 AS voicecountevening,
+      0 AS voicesumevening,
+      0 AS smscount,
+      0 AS smscountweekday,
+      0 AS smscountday,
+      0 AS smscountevening,
+      0 AS mc_alias_count,
+      count(DISTINCT sp2.alias_a) AS rc_alias_count,
+      sum(sp2.v_c) AS rc_voicecount,
+      sum(sp2.sms_w/6) AS rc_smscount,
+	  0 AS data_usage_sumday,
+	  0 AS data_usage_sumevening,
+	  0 AS data_usage_sumweekday,
+	  0 AS weekly_data_usage_sum,
+	  0 AS weekly_data_usage_cost_sum,
+	  0 AS weekly_cost_sum,
+      sp2.period
+    FROM data.in_split_weekly AS sp2
+    INNER JOIN (
+      SELECT
+        au2.alias_id,
+        weeklist2.yyyyww,
+        au2.in_out_network,
+        row_number() OVER (PARTITION BY au2.alias_id, weeklist2.yyyyww ORDER BY au2.validity DESC) AS validity_id 
+      FROM aliases.aliases_updated AS au2
+      INNER JOIN (
+        SELECT DISTINCT    
+          ml.monday,
+          core.date_to_yyyyww(ml.monday) AS yyyyww
+        FROM (
+          SELECT unnest(monday_list) AS monday
+        ) AS ml
+      ) AS weeklist2
+      ON au2.validity < weeklist2.monday + 7
+    ) AS al2
+    ON sp2.alias_a = al2.alias_id
+    AND sp2.period = al2.yyyyww
+    WHERE al2.validity_id = 1
+    GROUP BY sp2.alias_b, sp2.period, al2.in_out_network
+  ) AS aa
+  GROUP BY aa.alias_id, aa.period, aa.in_out_network;
+
+  ANALYZE data.in_split_aggregates;
+
+
+  insert into data.cdr_weekly_statistics
+  (table_name, period, rowcount, dis_alias_a, dis_alias_b,
+   avg_voice, avg_voice_sum, avg_sms)
+  select 
+    'in_split_aggregates'::text as table_name,
+    aa.period,  
+    count(*) as rowcount, 
+    count(distinct aa.alias_id) as dis_alias_id, 
+    0 as dis_alias_b,
+    avg(voicecount) as avg_voice, 
+    avg(voicesum) as avg_voice_sum, 
+    avg(smscount) as avg_sms
+  from data.in_split_aggregates aa
+  left outer join (
+    select period from data.cdr_weekly_statistics where table_name = 'in_split_aggregates' group by period
+  ) bb
+  on aa.period = bb.period
+  where bb.period is null
+  group by aa.period;
+
+
+<< new_version
+
+
+
+CREATE FUNCTION weekly_cdr_aggregates(yyyyww1 integer, yyyyww2 integer) RETURNS void
+    AS $$
+
+/* SUMMARY
+ * This function calculates aggregates from data.in_split_weekly table and inserts
+ * the results to data.in_split_aggregates table.
+ *
+ * INPUTS
+ * yyyyww1 : The first week to be processed
+ * yyyyww2 : The last week to be processed
+ *
+ * VERSION
+ * 2012-05-07 MOj - Bug 886 fixed
+ * 2011-10-13 TSi - Bug 742 fixed
+ */
+
+DECLARE
+
+  monday1 date := core.yyyyww_to_date(yyyyww1);
+  monday2 date := core.yyyyww_to_date(yyyyww2);
+  monday_list date[] := (SELECT array(SELECT monday1 + 7 * generate_series(0, (monday2 - monday1) / 7)));
+
+BEGIN
+
+  INSERT INTO data.in_split_aggregates (
+    alias_id,
+    in_out_network,
+    voicecount,
+    voicesum,
+    voicecountweekday,
+    voicesumweekday,
+    voicecountday,
+    voicesumday,
+    voicecountevening,
+    voicesumevening,
+    smscount,
+    smscountweekday,
+    smscountday,
+    smscountevening,
+    mc_alias_count,
+    rc_alias_count,
+    rc_voicecount,
+    rc_smscount,
+	data_usage_sumday,
+    data_usage_sumevening,
+    data_usage_sumweekday,
+	weekly_data_usage_sum,
+	weekly_data_usage_cost_sum,
+	weekly_cost_sum,
+    period )
+  SELECT 
+    aa.alias_id,
+    aa.in_out_network,
+    sum(aa.voicecount) AS voicecount,
+    sum(aa.voicesum) AS voicesum,
+    sum(aa.voicecountweekday) AS voicecountweekday,
+    sum(aa.voicesumweekday) AS voicesumweekday,
+    sum(aa.voicecountday) AS voicecountday,
+    sum(aa.voicesumday) AS voicesumday,
+    sum(aa.voicecountevening) AS voicecountevening,
+    sum(aa.voicesumevening) AS voicesumevening,
+    sum(aa.smscount) AS smscount,
+    sum(aa.smscountweekday) AS smscountweekday,
+    sum(aa.smscountday) AS smscountday,
+    sum(aa.smscountevening) AS smscountevening,
+    sum(aa.mc_alias_count) AS mc_alias_count,
+    sum(aa.rc_alias_count) AS rc_alias_count,
+    sum(aa.rc_voicecount) AS rc_voicecount,
+    sum(aa.rc_smscount) AS rc_smscount,
+	sum(aa.data_usage_sumday) AS data_usage_sumday,
+	sum(aa.data_usage_sumevening) AS data_usage_sumevening,
+	sum(aa.data_usage_sumweekday) AS data_usage_sumweekday,
+	sum(aa.weekly_data_usage_sum) AS weekly_data_usage_sum,
+	sum(aa.weekly_data_usage_cost_sum) AS weekly_data_usage_cost_sum,
+	sum(aa.weekly_cost_sum) AS weekly_cost_sum,
+    aa.period
+  FROM (
+    SELECT 
+      sp1.alias_a AS alias_id,
+      al1.in_out_network,
+      sum(sp1.v_c) AS voicecount,
+      sum(sp1.v_s) AS voicesum,
+      sum(sp1.v_c_week) AS voicecountweekday,
+      sum(sp1.v_s_week) AS voicesumweekday,
+      sum(sp1.v_c_day) AS voicecountday,
+      sum(sp1.v_s_day) AS voicesumday,
+      sum(sp1.v_c_eve) AS voicecountevening,
+      sum(sp1.v_s_eve) AS voicesumevening,
+      sum(sp1.sms_w/6) AS smscount,
+      sum(sp1.sms_c_week) AS smscountweekday,
+      sum(sp1.sms_c_day) AS smscountday,
+      sum(sp1.sms_c_eve) AS smscountevening,
+      count(DISTINCT sp1.alias_b) AS mc_alias_count,
+      0 AS rc_alias_count,
+      0 AS rc_voicecount,
+      0 AS rc_smscount,
+	  sum(sp1.data_usage_day) AS data_usage_sumday,
+	  sum(sp1.data_usage_eve) AS data_usage_sumevening,
+	  sum(sp1.data_usage_weekday) AS data_usage_sumweekday,
+	  sum(sp1.weekly_data_usage) AS weekly_data_usage_sum,
+	  sum(sp1.weekly_data_usage_cost) AS weekly_data_usage_cost_sum,
+	  sum(sp1.weekly_cost) AS weekly_cost_sum,
+      sp1.period
+    FROM data.in_split_weekly AS sp1
+    INNER JOIN (
+      SELECT
+        au1.alias_id,
+        weeklist1.yyyyww,
+        au1.in_out_network,
+        row_number() OVER (PARTITION BY au1.alias_id, weeklist1.yyyyww ORDER BY au1.validity DESC) AS validity_id 
+      FROM aliases.aliases_updated AS au1
+      INNER JOIN (
+        SELECT DISTINCT    
+          ml.monday,
+          core.date_to_yyyyww(ml.monday) AS yyyyww
+        FROM (
+          SELECT unnest(monday_list) AS monday
+        ) AS ml
+      ) AS weeklist1
+      ON au1.validity < weeklist1.monday + 7
+    ) AS al1
+    ON sp1.alias_b = al1.alias_id
+    AND sp1.period = al1.yyyyww
+    WHERE al1.validity_id = 1
+    GROUP BY sp1.alias_a, sp1.period, al1.in_out_network
+    UNION ALL
+    SELECT 
+      sp2.alias_b AS alias_id,
+      al2.in_out_network,
+      0 AS voicecount,
+      0 AS voicesum,
+      0 AS voicecountweekday,
+      0 AS voicesumweekday,
+      0 AS voicecountday,
+      0 AS voicesumday,
+      0 AS voicecountevening,
+      0 AS voicesumevening,
+      0 AS smscount,
+      0 AS smscountweekday,
+      0 AS smscountday,
+      0 AS smscountevening,
+      0 AS mc_alias_count,
+      count(DISTINCT sp2.alias_a) AS rc_alias_count,
+      sum(sp2.v_c) AS rc_voicecount,
+      sum(sp2.sms_w/6) AS rc_smscount,
+	  0 AS data_usage_sumday,
+	  0 AS data_usage_sumevening,
+	  0 AS data_usage_sumweekday,
+	  0 AS weekly_data_usage_sum,
+	  0 AS weekly_data_usage_cost_sum,
+	  0 AS weekly_cost_sum,
+      sp2.period
+    FROM data.in_split_weekly AS sp2
+    INNER JOIN (
+      SELECT
+        au2.alias_id,
+        weeklist2.yyyyww,
+        au2.in_out_network,
+        row_number() OVER (PARTITION BY au2.alias_id, weeklist2.yyyyww ORDER BY au2.validity DESC) AS validity_id 
+      FROM aliases.aliases_updated AS au2
+      INNER JOIN (
+        SELECT DISTINCT    
+          ml.monday,
+          core.date_to_yyyyww(ml.monday) AS yyyyww
+        FROM (
+          SELECT unnest(monday_list) AS monday
+        ) AS ml
+      ) AS weeklist2
+      ON au2.validity < weeklist2.monday + 7
+    ) AS al2
+    ON sp2.alias_a = al2.alias_id
+    AND sp2.period = al2.yyyyww
+    WHERE al2.validity_id = 1
+    GROUP BY sp2.alias_b, sp2.period, al2.in_out_network
+  ) AS aa
+  GROUP BY aa.alias_id, aa.period, aa.in_out_network;
+
+  ANALYZE data.in_split_aggregates;
+
+
+  insert into data.cdr_weekly_statistics
+  (table_name, period, rowcount, dis_alias_a, dis_alias_b,
+   avg_voice, avg_voice_sum, avg_sms)
+  select 
+    'in_split_aggregates'::text as table_name,
+    aa.period,  
+    count(*) as rowcount, 
+    count(distinct aa.alias_id) as dis_alias_id, 
+    0 as dis_alias_b,
+    avg(voicecount) as avg_voice, 
+    avg(voicesum) as avg_voice_sum, 
+    avg(smscount) as avg_sms
+  from data.in_split_aggregates aa
+  left outer join (
+    select period from data.cdr_weekly_statistics where table_name = 'in_split_aggregates' group by period
+  ) bb
+  on aa.period::integer = bb.period::integer
+  where bb.period is null
+  group by aa.period;
+
+
+=========================================================
 
 

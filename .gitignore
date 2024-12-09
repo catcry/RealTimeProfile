@@ -8,7 +8,7 @@ airflow/airflow-webserver.pid
 
 airflow/couchbase.crt
 
-airflow/couchbase.pam
+airflow/couchbase.pem
 
 airflow/dags/__pycache__/
 

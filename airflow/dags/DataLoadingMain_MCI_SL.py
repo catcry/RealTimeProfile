@@ -573,7 +573,7 @@ with DAG(
 
     def check_perform_cleanup_value(**kwargs):
         value = Variable.get("perform_cleanup")
-        logging.info(f"============================================================================================ {value}")
+        #logging.info(f"============================================================================================ {value}")
         if value == "True" or value is True:
             return 'cleanup_old_partitions'
         else:

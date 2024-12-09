@@ -53,6 +53,77 @@ data.in_split_aggregates,5,180,true
 
 is that ok?
 =======================================================
+we insert some data in tmp.mci_file_list
+
+
+
+
+FAA_VGSPOST-,daily,No,VGS,0.3
+FAA_VGSPRE-,daily,No,VGS,0.3
+FAA_OCS-REC-,daily,No,REC,0.3
+FAA_VGSD-,daily,No,VGS,0.3
+FAA_OCSB-COM-,daily,No,COM,0.3
+FAA_OCSB-COM-,daily,No,COM,0.3
+FAA_VGSC-,daily,No,VGS,0.3
+FAA_BILLING-,daily,No,BILLING,0.3
+FAA_OCS-COM-,daily,No,COM,0.3
+FAA_OCSPOSTB-RECLIVE-,daily,No,BILLING,0.3
+FAA_OCSA-REC-,daily,No,REC,0.3
+FAA_OCSPOST-COMLIVE-,daily,No,BILLING,0.3
+FAA_HUAMSC-,daily,No,HUAWEI,0.3
+FAA_NOKIAMSCLIVE-,daily,No,NOKIA,0.3
+FAA_OCSPOST-RECLIVE-,daily,No,BILLING,0.3
+FAA_NOKIAMSC-,daily,No,NOKIA,0.3
+FAA_OCS-COMLIVE-,daily,No,COM,0.3
+FAA_VGSA-,daily,No,VGS,0.3
+FAA_OCSPOSTA-COMLIVE-,daily,No,BILLING,0.3
+FAA_OCS-RECLIVE-,daily,No,REC,0.3
+FAA_OCSPOSTA-SMSLIVE-,daily,No,BILLING,0.3
+FAA_OCSPOST-SMSLIVE-,daily,No,BILLING,0.3
+FAA_OCSPOSTB-COMLIVE-,daily,No,BILLING,0.3
+FAA_HUAMSCLIVE-,daily,No,HUAWEI,0.3
+FAA_OCS-SMSLIVE-,daily,No,SMS,0.3
+FAA_OCSA-SMS-,daily,No,SMS,0.3
+FAA_VGSB-,daily,No,VGS,0.3
+FAA_OCSPOSTB-SMSLIVE-,daily,No,BILLING,0.3
+FAA_OCS-SMS-,daily,No,SMS,0.3
+FAA_OCSPOSTA-RECLIVE-,daily,No,BILLING,0.3
+FAA_VGS-,daily,No,VGS,0.3
+FAA_OCSA-COM-,daily,No,COM,0.3
+
+
+
+
+==========================================================
+
+we should set last_aggregated_day variable in check_ready_for_aggregation function.
+
+
+
+===========================================================
+
+they call a function in aggregation like this
+
+select data.cdr_full_weeks_optimized(
+                    select case when '$start_date_force'~'start_date' or '$end_date_force'~'$end_date' then '$start_full_week' else '$start_date_force' end)::timestamp without time zone,
+                    select case when '$start_date_force'~'start_date' or '$end_date_force'~'$end_date' then '$end_full_week' else '$end_date_force' end)::timestamp without time zone,
+                );
+
+
+check it.
+
+
+
+
+
+
+
+============================================
+check this row in in_split_weekly function
+
+coalesce(aa.alias_b,355497879) as alias_b, --temp fix for null alias_b in data cdrs. INSERT INTO aliases.string_id (string_id,date_inserted) VALUES ('dummy','2018-06-11'::date);
+
+
 
 
 

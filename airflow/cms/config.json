@@ -1,0 +1,10 @@
+{
+    "gz_files_pattern": "/backup/CMS_Report_Source/RTD*",
+    "db_params": {
+        "dbname": "mci_rtd",
+        "user": "rtd",
+        "password": "rtd@mci",
+        "host": "10.19.33.74",
+        "port": "5432"
+    }
+}

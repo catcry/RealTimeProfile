@@ -14,9 +14,9 @@ import couchbase.subdocument as SD
 
 def update_json_in_couchbase():
 
-    bucket_name = "rtpBucket"
-    document_id = "p::237671060"
-    field_name = "BI_Fields"
+    bucket_name = "data"
+    document_id = "t1"
+    field_name = "BI_Fieldssssss"
     field_value = {"name":"amir", "last":"Andalib", "age":"30"}
 
 
