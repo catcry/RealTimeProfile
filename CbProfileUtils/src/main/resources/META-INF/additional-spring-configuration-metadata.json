@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "biDirectoryPath",
+      "type": "java.lang.String",
+      "description": "The path of bi files. The app read all files in the directory and use them to update couchbase and postgresql database."
+
+  }
+] }
