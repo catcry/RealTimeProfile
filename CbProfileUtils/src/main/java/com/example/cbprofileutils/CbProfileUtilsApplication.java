@@ -36,8 +36,8 @@ public class CbProfileUtilsApplication {
     public static Long startTime;
     public static LocalDateTime startDateTime;
     private static ProfileDetailService profileDetailService;
-    private static int BATCH_SIZE;
-    private static int THREAD_COUNT;
+    private static String biHeaderSeperator;
+    private static String biDataSeperator;
 
     public static void main(String[] args) {
         ConfigurableApplicationContext applicationContext = SpringApplication.run(CbProfileUtilsApplication.class, args);
@@ -45,15 +45,13 @@ public class CbProfileUtilsApplication {
         cbProfileDetailRepository = applicationContext.getBean(CbProfileDetailRepository.class);
         cbProfileRepository = applicationContext.getBean(CbProfileRepository.class);
         profileDetailService = applicationContext.getBean(ProfileDetailService.class);
-        String filePath = args.length > 1 ? args[1] : applicationContext.getEnvironment().getProperty("biFilePath");
-        String headerFilePath = args.length > 2 ? args[2] : applicationContext.getEnvironment().getProperty("headerFilePath");
-        BATCH_SIZE = Integer.parseInt(Objects.requireNonNull(applicationContext.getEnvironment().getProperty("batchSize")));
-        THREAD_COUNT = Integer.parseInt(Objects.requireNonNull(applicationContext.getEnvironment().getProperty("threadCount")));
+        String filePath = args.length > 1 ? args[1] : applicationContext.getEnvironment().getProperty("bi.file.path");
+        String headerFilePath = args.length > 2 ? args[2] : applicationContext.getEnvironment().getProperty("header.file.path");
+        biHeaderSeperator = System.getProperty("bi.header.seperator");
+        biDataSeperator = System.getProperty("bi.data.seperator");
 
         logger.info("Application started");
         logger.info("filePath: {}", filePath);
-        logger.info("batchSize: {}", BATCH_SIZE);
-        logger.info("threadCount: {}", THREAD_COUNT);
 
         try {
             readAndUpdateDataFromDirectory(filePath, headerFilePath);
@@ -80,12 +78,12 @@ public class CbProfileUtilsApplication {
              BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             logger.info("file {} reading process has been started", filePath);
             String headerLine = headerReader.readLine();
-            headers = headerLine.split(",");
+            headers = headerLine.split(biHeaderSeperator);
             String line;
             int lineNumber = 0;
             while ((line = reader.readLine()) != null && lineNumber < 10) {
                 lineNumber++;
-                String[] parts = line.split("\\|");
+                String[] parts = line.split(biDataSeperator);
                 if (parts.length != headers.length) {
                     handleInvalidLine(lineNumber, line);
                     continue;
@@ -102,7 +100,7 @@ public class CbProfileUtilsApplication {
 
     public static void handleInvalidLine(int lineNumber, String line) {
         logger.error("Invalid data at line {}: {}", lineNumber, line);
-        String directoryPath = "errors";  // Change to your directory path
+        String directoryPath = "errors";
         String fileName = "errors.txt";
         boolean directoryExists = true;
         boolean fileExists = true;
