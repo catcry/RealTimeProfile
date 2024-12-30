@@ -3,13 +3,11 @@ package com.example.cbprofileutils.couchbase.service;
 import com.couchbase.client.core.error.DocumentNotFoundException;
 import com.couchbase.client.core.error.TimeoutException;
 import com.couchbase.client.java.json.JsonObject;
-import com.couchbase.client.java.kv.GetResult;
-import com.couchbase.client.java.kv.MutateInSpec;
-import com.example.cbprofileutils.util.RandomUtil;
+import com.example.cbprofileutils.couchbase.entity.PsqlProfileEntity;
+import com.example.cbprofileutils.couchbase.repository.CbProfileDetailRepository;
+import com.example.cbprofileutils.couchbase.repository.PsqlProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.couchbase.core.CouchbaseTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,17 +19,12 @@ public class ProfileDetailService {
 
     private static final Logger logger = LoggerFactory.getLogger(ProfileDetailService.class);
 
-    private final CouchbaseTemplate couchbaseTemplate;
-    @Value("${spring.data.couchbase.bucket-name}")
-    private String bucketName;
-    @Value("${profileIdsBucket}")
-    private String profileIdsBucket;
-    @Value("${profileIdsTemporaryBucket}")
-    private String profileIdsTemporaryBucket;
+    private final CbProfileDetailRepository cbProfileDetailRepository;
+    private final PsqlProfileRepository psqlProfileRepository;
 
-
-    public ProfileDetailService(CouchbaseTemplate couchbaseTemplate) {
-        this.couchbaseTemplate = couchbaseTemplate;
+    public ProfileDetailService(CbProfileDetailRepository cbProfileDetailRepository, PsqlProfileRepository psqlProfileRepository) {
+        this.cbProfileDetailRepository = cbProfileDetailRepository;
+        this.psqlProfileRepository = psqlProfileRepository;
     }
 
     public void addBIToProfileDetailsUsingBulkLoad(Map<String, JsonObject> biEntityMap) {
@@ -39,52 +32,37 @@ public class ProfileDetailService {
         for (String biMsisdn : biMsisdnSet) {
             JsonObject jsonObject = biEntityMap.get(biMsisdn);
             String msisdn = jsonObject.getString("MSISDN");
-            String profileDetailId = msisdn.substring(2) + RandomUtil.getUnixTimeString().substring(5);
-
             try {
-                GetResult getResult = couchbaseTemplate.getCouchbaseClientFactory().getCluster()
-                        .bucket(profileIdsBucket).defaultCollection().get(msisdn);
-                updateRtpBucket(getResult.contentAsObject().get("id").toString(), biEntityMap.get(biMsisdn));
+                cbProfileDetailRepository.updateProfileDetailByName(biEntityMap.get(biMsisdn), "FAA_" + msisdn);
             } catch (DocumentNotFoundException e){
-                JsonObject newDocument = JsonObject.create()
-                        .put("id", "p::" + biMsisdn)
-                        .put("name", "FAA_" + msisdn)
-                        .put("type", "FAA")
-                        .put("attrGrps", JsonObject.create().put("BI", jsonObject));
-                JsonObject jsonId = JsonObject.create().put("id", "p::" + profileDetailId);
-                insertIntoBuckets(newDocument, jsonId, profileDetailId, msisdn);
+                logger.info("There is no profile for this number '" + msisdn + "' in couchbase");
             }
         }
     }
 
-    private void updateRtpBucket(String rtpBucketId, JsonObject biObject) {
+
+    public void updateRtpBucket(JsonObject biObject) {
+        String msisdn = biObject.getString("MSISDN");
         try {
-            couchbaseTemplate.getCouchbaseClientFactory().getCluster().bucket(bucketName)
-                    .defaultCollection()
-                    .mutateIn(rtpBucketId, List.of(
-                            MutateInSpec.upsert("attrGrps.BI", biObject)
-                                    .createPath()
-                    ));
-        } catch (TimeoutException e) {
-            logger.info("\nupdate timeoutException: {}", e.getMessage());
-            logger.info("\nupdate timeoutException for rtp bucket id: p::{}", rtpBucketId);
-            updateRtpBucket(rtpBucketId, biObject);
+            String name = "FAA_" + biObject.getString("MSISDN");
+            List<PsqlProfileEntity> profileEntities = psqlProfileRepository.findByName(name);
+            if (profileEntities != null && !profileEntities.isEmpty()) {
+                PsqlProfileEntity psqlProfile = profileEntities.get(0);
+                cbProfileDetailRepository.updateProfileDetail(biObject, "p::" + psqlProfile.getId());
+            }
+        } catch (Exception e) {
+            logger.info("There is no profile for this number '" + msisdn + "' in couchbase, error: " + e.getMessage());
         }
     }
 
-    private void insertIntoBuckets(JsonObject newDocument, JsonObject jsonId, String profileDetailId, String msisdn) {
+    public void updateRtpBucketByName(JsonObject biObject) {
+        String msisdn = biObject.getString("MSISDN");
         try {
-            couchbaseTemplate.getCouchbaseClientFactory().getCluster().bucket(profileIdsBucket)
-                    .defaultCollection().insert(msisdn, jsonId);
-            couchbaseTemplate.getCouchbaseClientFactory().getCluster().bucket(profileIdsTemporaryBucket)
-                    .defaultCollection().insert(msisdn, jsonId);
-            couchbaseTemplate.getCouchbaseClientFactory().getCluster().bucket(bucketName)
-                    .defaultCollection().insert("p::" + profileDetailId, newDocument);
-        } catch (TimeoutException e) {
-            logger.info("\ninsert timeoutException: {}", e.getMessage());
-            logger.info("\ninsert timeoutException for rtp bucket id: p::{}", profileIdsBucket);
-            logger.info("\ninsert timeoutException for map msisdn: {}", msisdn);
-            insertIntoBuckets(newDocument, jsonId, profileDetailId, msisdn);
+            String name = "FAA_" + biObject.getString("MSISDN");
+            cbProfileDetailRepository.updateProfileDetailByName(biObject, name);
+        } catch (Exception e) {
+            logger.info("There is no profile for this number '" + msisdn + "' in couchbase");
         }
     }
+
 }
