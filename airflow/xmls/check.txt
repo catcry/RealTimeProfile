@@ -1,39 +1,5 @@
-Run_MCI --> Run_initialize_MCI --> *
+Run_MCI --> run_modelling_MCI --> UC_Product_modelling --> (regressionFitterTask, regressionApplierTask)
 
 
-Run_MCI --> Run_predictors_MCI --> CalculateCommonPredictors_MCI_nogeoloc --> (Network_scorer:Out_net)
-
-
-Run_MCI --> Run_predictors_MCI --> CalculateCommonPredictors_MCI_nogeoloc --> RunLDA_MCI --> (Handset_LDA_Task)
-
-
-
-Run_MCI --> Run_predictors_MCI --> CalculateCommonPredictors_MCI_nogeoloc --> RunLDA_cell_events_MCI --> (Handset_LDA_Task)
-
-
-Run_MCI --> Run_predictors_MCI --> (Combine_modelling_data)
-
-
-Run_MCI --> CalculateDescriptiveVariables_MCI_unforcenewnet --> (initialize_descriptive_variables_workflow, NetworkScorerTask, combine_descriptive_variables_to_one_matrix) 
-
-
-Run_MCI --> run_modelling_MCI --> DefineModelPreprocessing_MCI --> (TemplateModelToPremodelTask(product), TemplateModelToPremodelTask(zero_day_prediction), TemplateModelToPremodelTask(churn_postpaid), TemplateModelToPremodelTask(portout), TemplateModelToPremodelTask(churn_inactivity), )
-
-Run_MCI --> run_modelling_MCI --> UC_Portout_modelling_MCI --> (regressionFitterTask, regressionApplierTask)
-
-Run_MCI --> run_modelling_MCI --> UC_Product_modelling_MCI --> (regressionFitterTask, regressionApplierTask)
-
-Run_MCI --> run_modelling_MCI --> UC_ChurnInactivity_modelling_MCI --> (regressionFitterTask, regressionApplierTask)
-
-Run_MCI --> run_modelling_MCI --> UC_ChurnPostpaid_modelling_MCI --> (regressionFitterTask, regressionApplierTask)
-
-Run_MCI --> run_modelling_MCI --> UC_ZeroDayPrediction_modelling_MCI --> (regressionFitterTask, regressionApplierTask)
-
-Run_MCI --> run_modelling_MCI --> Run_modelling_verification_MCI --> (verify_product_results, verify_portout_results, verify_churn_inactivity_results, verify_churn_postpaid_results, verify_zero_day_prediction_results)
-
-
-RTPOutputGenerateFlow_CSV --> (Export_RTP_Dump, Transfer_Files, GetQuery1, GetQuery2, Export_Delta_Dump, Convert_Fiels)
-
-Export_MCI --> (Setup_Parameters, List_new_input_files, List_precious_errors_files, Move_error_files_to_archive,RtpServiceTask,Remove_File,Set_checkpoint_message)
 
 

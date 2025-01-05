@@ -131,7 +131,7 @@ END;
         <when>Parameter with name equal to model_fitting and str value equal to true ...</when>
         <tasks>info: Fitting Models, init Parameters for Fit, Run_mci, email1, join, Anfo: Applyind Models</tasks>
         <when>Parameter with name equal to model_fitting and str value equal to false ...</when>
-        <tasks>join, Info: Applying Models</tasks>
+        <tasks>join, Info:Applying_Models</tasks>
     </split>
     <info:Fitting_Models>
         <input_parameters>
@@ -173,6 +173,81 @@ END;
         </init_DataSource1>
         <Run_initialize_MCI>
             <initialize_generic_parameters>
+                <input_parameters>
+                    <DataSource1>analytics</DataSource1>
+                    <queryParametes></queryParametes>
+                    <sql>
+                    SELECT * FROM work.initialize_wf_muc_common(
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'source_period_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'post_source_period_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'lag_count' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'max_data_age' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'crm_data_age' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'n_handset_topics' ),
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'common' AND scoring_paras = 'n_cell_events_topics' ),  
+  $override_model_variables_check,  
+  ARRAY['churn_inactivity',           'churn_postpaid',           'zero_day_prediction',           'product',           'portout'],
+  ARRAY[$uc_include_churn_inactivity, $uc_include_churn_postpaid, $uc_include_zero_day_prediction, $uc_include_product, $uc_include_portout],
+  '$run_type', 
+  (SELECT CASE WHEN '$t2' ~ 't2' THEN NULL ELSE '$t2' END)::date,
+  $mod_job_id, 
+  '$run_descvar',
+  $descvar_interval_weeks,
+  '$lda_model_options', 
+  $lda_output_id_old,
+  '$lda_input_options',
+  $lda_input_id,
+  '$lda_cell_events_model_options', 
+  $lda_cell_events_output_id_old,
+  '$lda_cell_events_input_options',
+  $lda_cell_events_input_id,
+  nullif(array[$keys], array['']) || array['workflow_run_id', 'calculate_vargroup_output'], 
+  nullif(array[$vals], array['']) || array['$WORKFLOW_RUN_ID', '$calculate_vargroup_output'],
+  false
+);
+                    </sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <run_lda_cell_events>false</run_lda_cell_events>
+                    <calculate_lda_cell_events_predictors>false</calculate_lda_cell_events_predictors>
+                    <calculate_lda_cell_events_input_data>false</calculate_lda_cell_events_input_data>
+                    <fit_model>out.get(9).get(0)</fit_model>
+                    <calculate_predictors>out.get(9).get(0)</calculate_predictors>
+                    <source_period_length>out.get(9).get(0)</source_period_length>
+                    <lag_length>out.get(9).get(0)</lag_length>
+                    <lag_count>out.get(9).get(0)</lag_count>
+                    <t2>out.get(9).get(0)</t2>
+                    <t1>out.get(9).get(0)</t1>
+                    <network_2_id>out.get(9).get(0)</network_2_id>
+                    <arpu_query>out.get(9).get(0)</arpu_query>
+                    <calculate_targets>out.get(9).get(0)</calculate_targets>
+                    <force_new_network>out.get(9).get(0)</force_new_network>
+                    <calculate_descvar>out.get(9).get(0)</calculate_descvar>
+                    <network_weeks>out.get(9).get(0)</network_weeks>
+                    <tcrm>out.get(9).get(0)</tcrm>
+                    <job_use_cases>out.get(9).get(0)</job_use_cases>
+                    <n_handset_topics>out.get(9).get(0)</n_handset_topics>
+                    <lda_output_id>out.get(9).get(0)</lda_output_id>
+                    <lda_output_id_old>out.get(9).get(0)</lda_output_id_old>
+                    <lda_input_id>out.get(9).get(0)</lda_input_id>
+                    <calculate_lda_predictors>out.get(9).get(0)</calculate_lda_predictors>
+                    <calculate_lda_input_data>out.get(9).get(0)</calculate_lda_input_data>
+                    <run_lda>out.get(9).get(0)</run_lda>
+                    <apply_model>out.get(9).get(0)</apply_model>
+                    <network_id>out.get(9).get(0)</network_id>
+                    <mod_job_id>out.get(9).get(0)</mod_job_id>
+                    <uc_portout_template_model_id></uc_portout_template_model_id>
+                    <uc_churn_postpaid_template_model_id></uc_churn_postpaid_template_model_id>
+                    <uc_churn_inactivity_template_model_id></uc_churn_inactivity_template_model_id>
+                </output_parameters>
             </initialize_generic_parameters>
             <split>
                 <when></when>
@@ -211,14 +286,124 @@ END;
                 <tasks>join, end</tasks>
             </split:run_portout>
             <initialize_product>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParametes></queryParametes>
+                    <sql>
+                    SELECT * FROM work.initialize_product(
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'product' AND scoring_paras = 'gap_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'product' AND scoring_paras = 'target_period_length' ), 
+  $mod_job_id, 
+  $uc_product_model_id,
+  $redefine_preprocessing
+)
+                    </sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <uc_product_model_id>$out.get(0).get(0)</uc_product_model_id>
+                    <uc_product_template_model_id>$out.get(1).get(0)</uc_product_template_model_id>
+                <output_parameters>
             </initialize_product>
             <initialize_churn_inactivity>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParametes></queryParametes>
+                    <sql>
+                    SELECT * FROM work.initialize_product(
+SELECT * FROM work.initialize_churn_inactivity(
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'inactivity' AND scoring_paras = 'gap_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'inactivity' AND scoring_paras = 'target_period_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'inactivity' AND scoring_paras = 'gap2_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'inactivity' AND scoring_paras = 'evaluation_period_length' ),
+  $mod_job_id, 
+  $uc_churn_inactivity_model_id,
+  $uc_churn_inactivity_include_postpaid,
+  $redefine_preprocessing
+)
+                    </sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <uc_churn_inactivity_model_id>$out.get(0).get(0)</uc_churn_inactivity_model_id>
+                    <uc_churn_inactivity_template_model_id>$out.get(1).get(0)</uc_churn_inactivity_template_model_id>
+                <output_parameters>
             </initialize_churn_inactivity>
             <initialize_churn_postpaid>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParametes></queryParametes>
+                    <sql>
+ SELECT * FROM work.initialize_churn_postpaid(
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'postpaid' AND scoring_paras = 'gap_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'postpaid' AND scoring_paras = 'target_period_length' ),
+  $mod_job_id, 
+  $uc_churn_postpaid_model_id,
+  $redefine_preprocessing
+)
+                    </sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <uc_churn_postpaid_model_id>$out.get(0).get(0)</uc_churn_inactivity_model_id>
+                    <uc_churn_postpaid_template_model_id>$out.get(1).get(0)</uc_churn_inactivity_template_model_id>
+                <output_parameters>
             </initialize_churn_postpaid>
             <initialize_zero_day_prediction>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParametes></queryParametes>
+                    <sql>
+SELECT * FROM work.initialize_zero_day_prediction(
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'zero_day' AND scoring_paras = 'uc_zero_day_prediction_evaluation_period_length' ), 
+  $mod_job_id, 
+  $uc_zero_day_prediction_model_id,
+  $uc_zero_day_prediction_redefine_value_segments,
+  $redefine_preprocessing
+)
+                    </sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <uc_zero_day_prediction_model_id>$out.get(0).get(0)</uc_zero_day_prediction_model_id>
+                    <uc_zero_day_prediction_template_model_id>$out.get(1).get(0)</uc_zero_day_prediction_template_model_id>
+                <output_parameters>
             </initialize_zero_day_prediction>
             <initialize_portout>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParametes></queryParametes>
+                    <sql>
+SELECT * FROM work.initialize_portout(
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'portout' AND scoring_paras = 'gap_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'portout' AND scoring_paras = 'target_period_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'portout' AND scoring_paras = 'gap2_length' ), 
+  (SELECT para_value::integer 
+          FROM work.scoring_muc_parameters WHERE use_case= 'portout' AND scoring_paras = 'evaluation_period_length' ),
+  $mod_job_id, 
+  $uc_portout_model_id,
+  $uc_portout_include_postpaid,
+  $redefine_preprocessing
+)
+                    </sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <uc_portout_model_id>$out.get(0).get(0)</uc_portout_model_id>
+                    <uc_portout_template_model_id>$out.get(1).get(0)</uc_portout_template_model_id>
+                <output_parameters>
             </initialize_portout>
         </Run_initialize_MCI>
         <split:calculate_initialize_MCI>
@@ -1258,7 +1443,7 @@ END;
             <tasks>run_predictors_MCI,join, split:descriptice_variables</tasks>
         </split:calculate_targets>
         <run_predictors_MCI>
-            <CalculateCommonPredictrs_MCI_nogeoloc>
+            <CalculateCommonPredictors_MCI_nogeoloc>
                 <Disable_LDA_Predictors>
                     <input_parameters>
                     </input_parameters>
@@ -2534,6 +2719,63 @@ END;
                     </output_parameters>
                 </email>
                 <Network_Scorer:Out_net>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <a></a>
+                        <alias_a></alias_a>
+                        <alias_b></alias_b>
+                        <alphaScorer.beta></alphaScorer.beta>
+                        <alphaScorer.check></alphaScorer.check>
+                        <alphaScorer.rounds></alphaScorer.rounds>
+                        <arpu_query>$arpu_query</arpu_query>
+                        <b></b>
+                        <blacklist></blacklist>
+                        <blacklist_link_limit></blacklist_link_limit>
+                        <calc_communities>false</calc_communities>
+                        <calc_sarpu></calc_sarpu>
+                        <calc_scores_1></calc_scores_1>
+                        <calc_scores_2>false</calc_scores_2>
+                        <calculate_c></calculate_c>
+                        <calculate_kshell></calculate_kshell>
+                        <calculate_wec></calculate_wec>
+                        <callw></callw>
+                        <cdr></cdr>
+                        <combinedw></combinedw>
+                        <community_max_levels></community_max_levels>
+                        <community_max_rounds></community_max_rounds>
+                        <community_min_modularity_gain></community_min_modularity_gain>
+                        <community_target_size></community_target_size>
+                        <data_types></data_types>
+                        <debug>true</debug>
+                        <exclude_pure_out_net_links></exclude_pure_out_net_links>
+                        <highestbin></highestbin>
+                        <in_net>false</in_net>
+                        <in_table></in_table>
+                        <job_id_column_name></job_id_column_name>
+                        <max_net_size_factor></max_net_size_factor>
+                        <min_weight></min_weight>
+                        <mms></mms>
+                        <mmsw></mmsw>
+                        <net_2_prior_weight_scale></net_2_prior_weight_scale>
+                        <net_2_type></net_2_type>
+                        <net_id>$network_id</net_id>
+                        <net_id_2>0</net_id_2>
+                        <num_threads></num_threads>
+                        <out_scores></out_scores>
+                        <out_table></out_table>
+                        <period></period>
+                        <sms></sms>
+                        <smsw></smsw>
+                        <symmetric></symmetric>
+                        <temp_table></temp_table>
+                        <use_threads></use_threads>
+                        <video></video>
+                        <videow></videow>
+                        <weeks>$network_weeks</weeks>
+                        <weight_power></weight_power>
+                    </input_parameters>
+                    <output_parameters>
+                    </output_parameters>
                 </Network_Scorer:Out_net>
                 <email>
                     <input_parameters>
@@ -3154,6 +3396,12 @@ END;
                         </output_parameters>
                     </create_handset_LDA_input_data>
                     <Handset_LDA_Task>
+                        <input_parameters>
+                            <DataSource1></DataSource1>
+                            <alpha></alpha>
+                            <debug></debug>
+                            <doc_type></doc_type>
+                        </input_parameters>
                     </Handset_LDA_Task>
                     <Get_LDA_output_ID>
                         <input_parameters>
@@ -3294,6 +3542,12 @@ END;
                         </output_parameters>    
                     </create_events_lda_input_data>
                     <Handset_LDA_Task>
+                        <input_parameters>
+                            <DataSource1></DataSource1>
+                            <alpha></alpha>
+                            <debug></debug>
+                            <doc_type></doc_type>
+                        </input_parameters>
                     </Handset_LDA_Task>
                     <Get_LDA_output_ID>
                         <input_parameters>
@@ -3539,7 +3793,7 @@ END;
                         <out></out>
                     </output_parameters>
                 </create_predictors_cell_events_model>
-            </CalculateCommonPredictrs_MCI_nogeoloc>
+            </CalculateCommonPredictors_MCI_nogeoloc>
             <split:run_products>
                 <when>parameter with name equal to uc_inclue_product and value equal to true</when>
                 <tasks>UC_Product_predictors, join</tasks>
@@ -3843,6 +4097,32 @@ END;
                 <end></end>
             </UC_Portout_predictors_MCI>
             <Combine_modelling_data>
+                <input_parameters>
+                    <DataSource1>analytics</DataSource1>
+                    <queryParameters></queryParameters>
+                    <sql>
+                        SELECT * FROM work.combine_modelling_data(
+$mod_job_id,
+'work.modelling_data_matrix',
+'work.module_targets,
+work.modelling_data_matrix_1,
+work.modelling_data_matrix_geolocation,
+work.modelling_data_matrix_2,
+work.modelling_data_matrix_3,
+work.modelling_data_matrix_4_made,
+work.modelling_data_matrix_4_rec,
+work.modelling_data_matrix_topup1,
+work.modelling_data_matrix_topup2,
+work.modelling_data_matrix_topup3,
+work.modelling_data_matrix_topup3a,
+work.modelling_data_matrix_handset_topic,
+work.modelling_data_matrix_cell_events_topic,
+work.modelling_data_matrix_zdp1,
+work.modelling_data_matrix_zdp2,
+work.modelling_data_matrix_zdp4',
+'mod_job_id,alias_id');
+                    </sql>
+                </input_parameters>
             </Combine_modelling_data>
             <network_statistics_chart>
                 <input_parameters>
@@ -3991,6 +4271,27 @@ END;
                 </output_parameters>
             </unforced_network>
             <initialize_descriptive_variables_workflow>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParameters></queryParameters>
+                    <sql>select * from work.calculate_descriptive_variables($mod_job_id, $force_new_network);<sql>
+                </input_parameters>
+                <output_parameters>
+                    <out></out>
+                    <descvar_churn_inactivity_included>$out.get(9).get(0)</descvar_churn_inactivity_included>
+                    <network_exists>$out.get(8).get(0)</network_exists>
+                    <t2_descvar>$out.get(7).get(0)</t2_descvar>
+                    <t1_descvar>$out.get(6).get(0)</t1_descvar>
+                    <tcrm_descvar>$out.get(5).get(0)</tcrm_descvar>
+                    <network_weeks_descvar>$out.get(4).get(0)</network_weeks_descvar>
+                    <network_id_descvar>$out.get(3).get(0)</network_id_descvar>
+                    <module_id_descvar>$out.get(2).get(0)</module_id_descvar>
+                    <arpu_query_descvar>$out.get(11).get(0)</arpu_query_descvar>
+                    <descvar_churn_postpaid_included>$out.get(10).get(0)</descvar_churn_postpaid_included>
+                    <error_message>$out.get(1).get(0)</error_message>
+                    <status>$out.get(0).get(0)</status>
+                    <descvar_portout_included>$out.get(12).get(0)</descvar_portout_included>
+                </output_parameters>
             </initialize_descriptive_variables_workflow>
             <split>
                 <when>parameter with name equal to network_exists and value equal to -1</when>
@@ -4097,6 +4398,63 @@ END;
                 </output_parameters>
             </Calculate_Monthly_Arpu>
             <NetworkScorerTask>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <a></a>
+                    <alias_a></alias_a>
+                    <alias_b></alias_b>
+                    <alphaScorer.beta></alphaScorer.beta>
+                    <alphaScorer.check></alphaScorer.check>
+                    <alphaScorer.rounds></alphaScorer.rounds>
+                    <arpu_query>$arpu_query_descvat</arpu_query>
+                    <b></b>
+                    <blacklist></blacklist>
+                    <blacklist_link_limit></blacklist_link_limit>
+                    <calc_communities>false</calc_communities>
+                    <calc_sarpu></calc_sarpu>
+                    <calc_scores_1></calc_scores_1>
+                    <calc_scores_2></calc_scores_2>
+                    <calculate_c></calculate_c>
+                    <calculate_kshell></calculate_kshell>
+                    <calculate_wec></calculate_wec>
+                    <callw></callw>
+                    <cdr></cdr>
+                    <combinedw></combinedw>
+                    <community_max_levels></community_max_levels>
+                    <community_max_rounds></community_max_rounds>
+                    <community_min_modularity_gain></community_min_modularity_gain>
+                    <community_target_size></community_target_size>
+                    <data_types></data_types>
+                    <debug>true</debug>
+                    <exclude_pure_out_net_links></exclude_pure_out_net_links>
+                    <highestbin></highestbin>
+                    <in_net>false</in_net>
+                    <in_table></in_table>
+                    <job_id_column_name></job_id_column_name>
+                    <max_net_size_factor></max_net_size_factor>
+                    <min_weight></min_weight>
+                    <mms></mms>
+                    <mmsw></mmsw>
+                    <net_2_prior_weight_scale></net_2_prior_weight_scale>
+                    <net_2_type></net_2_type>
+                    <net_id>$network_id_descvar</net_id>
+                    <net_id_2>0</net_id_2>
+                    <num_threads></num_threads>
+                    <out_scores></out_scores>
+                    <out_table></out_table>
+                    <period></period>
+                    <sms></sms>
+                    <smsw></smsw>
+                    <symmetric></symmetric>
+                    <temp_table></temp_table>
+                    <use_threads></use_threads>
+                    <video></video>
+                    <videow></videow>
+                    <weeks>$network_weeks_descvar</weeks>
+                    <weight_power></weight_power>
+                </input_parameters>
+                <output_parameters>
+                </output_parameters>
             </NetworkScorerTask>
             <Fill_Subscriber_List>
                 <input_parameters>
@@ -5092,6 +5450,24 @@ END;
                 </output_parameters>
             </calculate_descriptive_variables_topup>
             <combine_descriptive_variables_to_one_matrix>
+                <input_parameters>
+                    <DataSource1></DataSource1>
+                    <queryParameters></queryParameters>
+                    <sql>
+                        SELECT * FROM work.combine_modelling_data(
+$module_id_descvar,
+'results.descriptive_variables_subscriber_matrix',
+'tmp.descriptive_variables_subscriber_matrix_base_1a,
+tmp.descriptive_variables_subscriber_matrix_base_1b,
+tmp.descriptive_variables_subscriber_matrix_base_1c,
+tmp.descriptive_variables_subscriber_matrix_base_2a,
+tmp.descriptive_variables_subscriber_matrix_base_2b,
+tmp.descriptive_variables_subscriber_matrix_base_2c,
+tmp.descriptive_variables_subscriber_matrix_base_2d,
+tmp.descriptive_variables_subscriber_matrix_topup',
+'mod_job_id,alias_id');
+                    </sql>
+                </input_parameters>
             </combine_descriptive_variables_to_one_matrix>
             <descriptice_variables_to_charts>
                 <input_parameters>
@@ -5552,15 +5928,105 @@ END;
                     <tasks>join</tasks>
                 </split:Run_product>
                 <TemplateModelToPremodelTask(product)>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <category_threshold></category_threshold>
+                        <contract_length_threshold></contract_length_threshold>
+                        <indicator_threshold></indicator_threshold>
+                        <input_table></input_table>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_table></model_table>
+                        <modelling_data_limit></modelling_data_limit>
+                        <output_table></output_table>
+                        <preModelId_input></preModelld_input>
+                        <templateModelId>$uc_product_template_model_id</templateModelId>
+                        <variable_threshold></variable_threshold>
+                    </input_parameters>
+                    <output_parameters>
+                        <preModelId></preModelId>
+                        <uc_product_model_id>$preModelId</uc_product_model_id>
+                    </output_parameters>
                 </TemplateModelToPremodelTask(product)>
                 <TemplateModelToPremodelTask(zero_day_prediction)>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <category_threshold></category_threshold>
+                        <contract_length_threshold></contract_length_threshold>
+                        <indicator_threshold></indicator_threshold>
+                        <input_table></input_table>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_table></model_table>
+                        <modelling_data_limit></modelling_data_limit>
+                        <output_table></output_table>
+                        <preModelId_input></preModelld_input>
+                        <templateModelId>$uc_zero_day_prediction_template_model_id</templateModelId>
+                        <variable_threshold></variable_threshold>
+                    </input_parameters>
+                    <output_parameters>
+                        <preModelId></preModelId>
+                        <uc_zero_day_predoction_model_id>$preModelId</uc_zero_day_predoction_model_id>
+                    </output_parameters>
                 </TemplateModelToPremodelTask(zero_day_prediction)>
                 <TemplateModelToPremodelTask(churn_postpaid)>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <category_threshold></category_threshold>
+                        <contract_length_threshold></contract_length_threshold>
+                        <indicator_threshold></indicator_threshold>
+                        <input_table></input_table>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_table></model_table>
+                        <modelling_data_limit></modelling_data_limit>
+                        <output_table></output_table>
+                        <preModelId_input></preModelld_input>
+                        <templateModelId>$uc_churn_postpaid_template_model_id</templateModelId>
+                        <variable_threshold></variable_threshold>
+                    </input_parameters>
+                    <output_parameters>
+                        <preModelId></preModelId>
+                        <uc_chrun_postpaid_model_id>$preModelId</uc_chrun_postpaid_model_id>
+                    </output_parameters>
                 </TemplateModelToPremodelTask(churn_postpaid)>
                 <TemplateModelToPremodelTask(portout)>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <category_threshold></category_threshold>
+                        <contract_length_threshold></contract_length_threshold>
+                        <indicator_threshold></indicator_threshold>
+                        <input_table></input_table>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_table></model_table>
+                        <modelling_data_limit></modelling_data_limit>
+                        <output_table></output_table>
+                        <preModelId_input></preModelld_input>
+                        <templateModelId>$uc_portout_template_model_id</templateModelId>
+                        <variable_threshold></variable_threshold>
+                    </input_parameters>
+                    <output_parameters>
+                        <preModelId></preModelId>
+                        <uc_portout_model_id>$preModelId</uc_portout_model_id>
+                    </output_parameters>
                 </TemplateModelToPremodelTask(portout)>
                 <TemplateModelToPremodelTask(churn_inactivity)>
-                </TemplateModelToPremodelTask(portout)>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <category_threshold></category_threshold>
+                        <contract_length_threshold></contract_length_threshold>
+                        <indicator_threshold></indicator_threshold>
+                        <input_table></input_table>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_table></model_table>
+                        <modelling_data_limit></modelling_data_limit>
+                        <output_table></output_table>
+                        <preModelId_input></preModelld_input>
+                        <templateModelId>$uc_churn_inactivity_template_model_id</templateModelId>
+                        <variable_threshold></variable_threshold>
+                    </input_parameters>
+                    <output_parameters>
+                        <preModelId></preModelId>
+                        <uc_chrun_inactivity_model_id>$preModelId</uc_chrun_inactivity_model_id>
+                    </output_parameters>
+                </TemplateModelToPremodelTask(churn_inactivity)>
             </DefineModelPreprocessing_MCI>
             <split>
                 <when></when>
@@ -5612,8 +6078,49 @@ END;
                     <tasks>regressionApplierTask, join</tasks>
                 </split:fit_model>
                 <regressionFitterTask>
+                    <input_parameters>
+                        <DataSource1>analytics</DataSource1>
+                        <balanced></balanced>
+                        <data_upper_size_for_cross_validation></data_upper_size_for_cross_validation>
+                        <debug></debug>
+                        <input_table></input_table>
+                        <max_sample_size>30000</max_sample_size>
+                        <max_sample_size_negative>25000</max_sample_size_negative>
+                        <max_sample_size_positive>5000</max_sample_size_positive>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>uc_portout_model_id</model_id>
+                        <model_table></model_table>
+                        <num_threads></num_threads>
+                        <random_seed>1234</random_seed>
+                        <use_threads></use_threads>
+                        <where_clause>target_portout IS NOT NULL</where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                    </output_parameters>
                 </regressionFitterTask>
                 <regressionApplierTask>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <analyze_output_table></analyze_output_table>
+                        <calculate_variable_group_scores>$calculate_vargroup_output</calculate_variable_group_scores>
+                        <data></data>
+                        <debug></debug>
+                        <input_tables></input_tables>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>$uc_portout_model_id</model_id>
+                        <model_tables></model_tables>
+                        <num_threads></num_threads>
+                        <output_table></output_table>
+                        <prototype_mod_job_id></prototype_mod_job_id>
+                        <prototype_table></prototype_table>
+                        <save_model_id></save_model_id>
+                        <use_threads></use_threads>
+                        <variable_group_scores_table></variable_group_scores_table>
+                        <where_clause>audience_portout IS NOT NULL</where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                        <scores></scores>
+                    </output_parameters>
                 </regressionApplierTask>
             </UC_Portout_modelling_MCI>
             <UC_Product_modelling>
@@ -5648,11 +6155,52 @@ END;
                     <tasks>regressionApplierTask, join</tasks>
                 </split:fit_model>
                 <regressionFitterTask>
+                    <input_parameters>
+                        <DataSource1>analytics</DataSource1>
+                        <balanced></balanced>
+                        <data_upper_size_for_cross_validation></data_upper_size_for_cross_validation>
+                        <debug></debug>
+                        <input_table></input_table>
+                        <max_sample_size>200000</max_sample_size>
+                        <max_sample_size_negative>100000</max_sample_size_negative>
+                        <max_sample_size_positive>100000</max_sample_size_positive>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>uc_churn_inactivity_model_id</model_id>
+                        <model_table></model_table>
+                        <num_threads></num_threads>
+                        <random_seed>1234</random_seed>
+                        <use_threads></use_threads>
+                        <where_clause>target_churn_inactivity IS NOT NULL</where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                    </output_parameters>
                 </regressionFitterTask>
                 <regressionApplierTask>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <analyze_output_table></analyze_output_table>
+                        <calculate_variable_group_scores>$calculate_vargroup_output</calculate_variable_group_scores>
+                        <data></data>
+                        <debug></debug>
+                        <input_tables></input_tables>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>$uc_chrun_inactivity_model_id</model_id>
+                        <model_tables></model_tables>
+                        <num_threads></num_threads>
+                        <output_table></output_table>
+                        <prototype_mod_job_id></prototype_mod_job_id>
+                        <prototype_table></prototype_table>
+                        <save_model_id></save_model_id>
+                        <use_threads></use_threads>
+                        <variable_group_scores_table></variable_group_scores_table>
+                        <where_clause>audience_churn_inactivity IS NOT NULL</where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                        <scores></scores>
+                    </output_parameters>
                 </regressionApplierTask>
             </UC_ChurnInactivity_modelling_MCI>
-            <UC_ChurnPostpaid_modelling_MCI>
+            <UC_ChurnPostpaid_modelling>
                 <split:modelling>
                     <when>parameter wth name equal to apply_model and value equal to true</when>
                     <tasks>split:fit_model, join</tasks>
@@ -5666,11 +6214,52 @@ END;
                     <tasks>regressionApplierTask, join</tasks>
                 </split:fit_model>
                 <regressionFitterTask>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <balanced></balanced>
+                        <data_upper_size_for_cross_validation></data_upper_size_for_cross_validation>
+                        <debug></debug>
+                        <input_table></input_table>
+                        <max_sample_size></max_sample_size>
+                        <max_sample_size_negative></max_sample_size_negative>
+                        <max_sample_size_positive></max_sample_size_positive>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>uc_churn_postpaid_model_id</model_id>
+                        <model_table></model_table>
+                        <num_threads></num_threads>
+                        <random_seed></random_seed>
+                        <use_threads></use_threads>
+                        <where_clause>target_churn_postpaid IS NOT NULL</where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                    </output_parameters>
                 </regressionFitterTask>
-                <regressionApplierTask>
                 </regressionApplierTask>
-            </UC_ChurnPostpaid_modelling_MCI>
-            <UC_ZeroDayPrediction_modelling_MCI>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <analyze_output_table></analyze_output_table>
+                        <calculate_variable_group_scores>$calculate_vargroup_output</calculate_variable_group_scores>
+                        <data></data>
+                        <debug></debug>
+                        <input_tables></input_tables>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>$uc_chrun_postpaid_model_id</model_id>
+                        <model_tables></model_tables>
+                        <num_threads></num_threads>
+                        <output_table></output_table>
+                        <prototype_mod_job_id></prototype_mod_job_id>
+                        <prototype_table></prototype_table>
+                        <save_model_id></save_model_id>
+                        <use_threads></use_threads>
+                        <variable_group_scores_table></variable_group_scores_table>
+                        <where_clause>audience_churn_postpaid IS NOT NULL</where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                        <scores></scores>
+                    </output_parameters>
+                </regressionApplierTask>
+            </UC_ChurnPostpaid_modelling>
+            <UC_ZeroDayPrediction_modelling>
                 <split:modelling>
                     <when>parameter wth name equal to apply_model and value equal to true</when>
                     <tasks>split:fit_model, join</tasks>
@@ -5684,10 +6273,51 @@ END;
                     <tasks>regressionApplierTask, join</tasks>
                 </split:fit_model>
                 <regressionFitterTask>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <balanced></balanced>
+                        <data_upper_size_for_cross_validation></data_upper_size_for_cross_validation>
+                        <debug></debug>
+                        <input_table></input_table>
+                        <max_sample_size></max_sample_size>
+                        <max_sample_size_negative></max_sample_size_negative>
+                        <max_sample_size_positive></max_sample_size_positive>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>uc_zero_day_prediction_model_id</model_id>
+                        <model_table></model_table>
+                        <num_threads></num_threads>
+                        <random_seed></random_seed>
+                        <use_threads></use_threads>
+                        <where_clause></where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                    </output_parameters>
                 </regressionFitterTask>
-                <regressionApplierTask>
                 </regressionApplierTask>
-            </UC_ZeroDayPrediction_modelling_MCI>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <analyze_output_table></analyze_output_table>
+                        <calculate_variable_group_scores></calculate_variable_group_scores>
+                        <data></data>
+                        <debug></debug>
+                        <input_tables></input_tables>
+                        <mod_job_id>$mod_job_id</mod_job_id>
+                        <model_id>$uc_zero_day_prediction_model_id</model_id>
+                        <model_tables></model_tables>
+                        <num_threads></num_threads>
+                        <output_table></output_table>
+                        <prototype_mod_job_id></prototype_mod_job_id>
+                        <prototype_table></prototype_table>
+                        <save_model_id></save_model_id>
+                        <use_threads></use_threads>
+                        <variable_group_scores_table></variable_group_scores_table>
+                        <where_clause></where_clause>
+                    </input_parameters>
+                    <output_parameters>
+                        <scores></scores>
+                    </output_parameters>
+                </regressionApplierTask>
+            </UC_ZeroDayPrediction_modelling>
             <split>
                 <when></when>
                 <tasks>split:varGroups, join</tasks>
@@ -6024,14 +6654,54 @@ END;
                     <tasks>join</tasks>
                 </split:run_zero_day_perdiction>
                 <verify_product_results>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <queryparameters></queryparameters>
+                        <sql>select * from results.verify_results($mod_job_id, 'product', ARRAY['roc','lift','camulative_gains', 'camulative_gains_ideal']);<sql>
+                    </input_parameters>
+                    <output_parameters>
+                        <out></out>
+                    </output_parameters>
                 </verify_product_results>
                 <verify_portout_results>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <queryparameters></queryparameters>
+                        <sql>select * from results.verify_results($mod_job_id, 'portout', ARRAY['roc','lift','camulative_gains', 'camulative_gains_ideal']);<sql>
+                    </input_parameters>
+                    <output_parameters>
+                        <out></out>
+                    </output_parameters>
                 </verify_portout_results>
                 <verify_churn_inactivity_results>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <queryparameters></queryparameters>
+                        <sql>select * from results.verify_results($mod_job_id, 'churn_inactivity', ARRAY['roc','lift','camulative_gains', 'camulative_gains_ideal']);<sql>
+                    </input_parameters>
+                    <output_parameters>
+                        <out></out>
+                    </output_parameters>
                 </verify_churn_inactivity_results>
                 <verify_churn_postpaid_results>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <queryparameters></queryparameters>
+                        <sql>select * from results.verify_results($mod_job_id, 'churn_postpaid', ARRAY['roc','lift','camulative_gains', 'camulative_gains_ideal']);<sql>
+                    </input_parameters>
+                    <output_parameters>
+                        <out></out>
+                    </output_parameters>
                 </verify_churn_postpaid_results>
                 <verify_zero_day_prediction_results>
+                    <input_parameters>
+                        <DataSource1></DataSource1>
+                        <queryparameters></queryparameters>
+                        <sql>select * from results.verify_results($mod_job_id, 'zero_day_prediction`', ARRAY['roc','lift','camulative_gains', 'camulative_gains_ideal']);<sql>
+                    </input_parameters>
+                    <output_parameters>
+                        <out></out>
+                    </output_parameters>
                 </verify_zero_day_prediction_results>
             </Run_modelling_verification_MCI>
         </Run_modelling_MCI>
@@ -7547,6 +8217,21 @@ END;
             </output_parameters>
         </Get_Query>
         <Export_RTP_Dump>
+            <input_parameters>
+                <command>psql -d $AnalyticsDatabaseName -h $AnalyticsDatabaseHost -p $AnalyticsDatabasePort -U xsl -c "" COPY ($ItemQueryDump) TO STDOUT DELIMITER AS ';' NULL AS '' "" > $LocalhostOutputPath/$DumpFileName</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+            </output_parameters>
         </Export_RTP_Dump>
         <split>
             <when>parameter with name equal to exitstatus and int value not equal to 0</when>
@@ -7555,6 +8240,21 @@ END;
             <tasks>fualt:Non-zero exit status</tasks>
         </split>
         <Transfer_Files>
+            <input_parameters>
+                <command>scp $LocalhostOutputPath/$DumpFileName $OutputHostUsername@OutputHost:$OutputHostPath/rtp_dump; rm $LocalhostOutputPath/$DumpFileName</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+            </output_parameters>
         </Transfer_Files>
         <split>
             <when>parameter with name equal to new_delta_dump and str value equal to true</when>
@@ -7563,10 +8263,252 @@ END;
             <tasks>GetQuery2, join</tasks>
         </split>
         <GetQuery1>
+            <input_parameters>
+            </input_parameters>
+            <output_parameters>
+                <ItemQueryDelta>
+                      SELECT
+    msisdn,
+    case when (pkg_to_payg_voice = -999) then pkg_to_payg_voice else round(pkg_to_payg_voice::numeric, 2) end ,
+    case when (pkg_to_payg_data = -999) then pkg_to_payg_data else round(pkg_to_payg_data::numeric, 2) end ,
+    case when (roam_int_rev_to_arpu = -999) then roam_int_rev_to_arpu else round(roam_int_rev_to_arpu::numeric, 2) end ,
+    case when (vas_cost_to_arpu = -999) then vas_cost_to_arpu else round(vas_cost_to_arpu::numeric, 2) end ,
+    case when (payg_data_rev_to_arpu = -999) then payg_data_rev_to_arpu else round(payg_data_rev_to_arpu::numeric, 2) end ,
+    case when (onnet_to_offnet_rev = -999) then onnet_to_offnet_rev else round(onnet_to_offnet_rev::numeric, 2) end ,
+    case when (arpu = -999) then arpu else round(arpu::numeric, 2) end ,
+    round(arpu::numeric, 2),
+    status,
+    peak_type_voice,
+    peak_type_data,
+    payment_type,
+    monthly_data_pkg_size,
+    is_multi_sim_phone,
+    arpu_segment,
+    case when (avg_monthly_topup_nmb = -999) then avg_monthly_topup_nmb else round(avg_monthly_topup_nmb::numeric, 2) end ,
+    case when (avg_monthly_topup_cost = -999) then avg_monthly_topup_cost else round(avg_monthly_topup_cost::numeric, 2) end ,
+    is_smart_phone_user,
+    brand,
+    model,
+    os,
+    age,
+    gender,
+    churn_propensity,
+    portout_propensity,
+    tenure,
+    portout_status,
+    subscriber_segment,
+    contact_cust_care_ntwk,
+    contact_cust_care_bill,
+    contact_cust_care_promo,
+    provience,
+    case when (avg_onnet_voice_min = -999) then avg_onnet_voice_min else round(avg_onnet_voice_min::numeric, 2) end ,
+    case when (avg_offnet_voice_min = -999) then avg_offnet_voice_min else round(avg_offnet_voice_min::numeric, 2) end ,
+    case when (avg_nmb_sms_sent = -999) then avg_nmb_sms_sent else round(avg_nmb_sms_sent::numeric, 2) end ,
+    case when (avg_data_usage = -999) then avg_data_usage else round(avg_data_usage::numeric, 2) end ,
+    case when (avg_business_voice_usage = -999) then avg_business_voice_usage else round(avg_business_voice_usage::numeric, 2) end ,
+    case when (avg_business_data_usage = -999) then avg_business_data_usage else round(avg_business_data_usage::numeric, 2) end ,
+    case when (avg_non_business_voice_usage = -999) then avg_non_business_voice_usage else round(avg_non_business_voice_usage::numeric, 2) end ,
+    case when (avg_non_business_data_usage = -999) then avg_non_business_data_usage else round(avg_non_business_data_usage::numeric, 2) end ,
+    special_segments,
+    b2b_service_subscription,
+    company_type,
+    b2b_segments,
+    industry,
+    enterprise_national_id,
+    case when (avg_daily_2g_data_usage = -999) then avg_daily_2g_data_usage else round(avg_daily_2g_data_usage::numeric, 2) end ,
+    case when (avg_daily_3g_data_usage = -999) then avg_daily_3g_data_usage else round(avg_daily_3g_data_usage::numeric, 2) end ,
+    case when (avg_daily_4g_data_usage = -999) then avg_daily_4g_data_usage else round(avg_daily_4g_data_usage::numeric, 2) end
+  FROM (
+    SELECT
+      *,
+      coalesce(pkg_to_payg_voice::text, '') ||
+      coalesce(pkg_to_payg_data::text, '') ||
+      coalesce(roam_int_rev_to_arpu::text, '') ||
+      coalesce(vas_cost_to_arpu::text, '') ||
+      coalesce(payg_data_rev_to_arpu::text, '') ||
+      coalesce(onnet_to_offnet_rev::text, '') ||
+      coalesce(arpu::text, '') ||
+      coalesce(status, '') ||
+      coalesce(peak_type_voice, '') ||
+      coalesce(peak_type_data, '') ||
+      coalesce(payment_type, '') ||
+      coalesce(monthly_data_pkg_size, '') ||
+      coalesce(is_multi_sim_phone, '') ||
+      coalesce(arpu_segment, '') ||
+      coalesce(avg_monthly_topup_nmb::text, '') ||
+      coalesce(avg_monthly_topup_cost::text, '') ||
+      coalesce(is_smart_phone_user, '') ||
+      coalesce(brand, '') ||
+      coalesce(model, '') ||
+      coalesce(os, '') ||
+      coalesce(age::text, '') ||
+      coalesce(gender, '') ||
+      coalesce(churn_propensity, '') ||
+      coalesce(portout_propensity, '') ||
+      coalesce(tenure::text, '') ||
+      coalesce(portout_status, '') ||
+      coalesce(subscriber_segment, '') ||
+      coalesce(contact_cust_care_ntwk::text, '') ||
+      coalesce(contact_cust_care_bill::text, '') ||
+      coalesce(contact_cust_care_promo::text, '') ||
+      coalesce(provience, '') ||
+      coalesce(avg_onnet_voice_min::text, '') ||
+      coalesce(avg_offnet_voice_min::text, '') ||
+      coalesce(avg_nmb_sms_sent::text, '') ||
+      coalesce(avg_data_usage::text, '') ||
+      coalesce(avg_business_voice_usage::text, '') ||
+      coalesce(avg_business_data_usage::text, '') ||
+      coalesce(avg_non_business_voice_usage::text, '') ||
+      coalesce(avg_non_business_data_usage::text, '') ||
+      coalesce(special_segments, '') ||
+      coalesce(b2b_service_subscription, '') ||
+      coalesce(company_type, '') ||
+      coalesce(b2b_segments, '') ||
+      coalesce(industry, '') ||
+      coalesce(enterprise_national_id, '') ||
+      coalesce(avg_daily_2g_data_usage::text, '') ||
+      coalesce(avg_daily_3g_data_usage::text, '') ||
+      coalesce(avg_daily_4g_data_usage::text, '')
+      AS concat_ws
+    FROM results.rtp_dump_delta
+    WHERE dump_id_y = $mod_job_id
+    AND dump_id_x IS NULL
+  ) delta
+  WHERE concat_ws <> ''
+                </ItemQueryDelta>
+            </output_parameters>
         </GetQuery1>
         <GetQuery2>
+            <input_parameters>
+            </input_parameters>
+            <output_parameters>
+                <ItemQueryDelta>
+                      SELECT
+    msisdn,
+    case when (pkg_to_payg_voice = -999) then pkg_to_payg_voice else round(pkg_to_payg_voice::numeric, 2) end ,
+    case when (pkg_to_payg_data = -999) then pkg_to_payg_data else round(pkg_to_payg_data::numeric, 2) end ,
+    case when (roam_int_rev_to_arpu = -999) then roam_int_rev_to_arpu else round(roam_int_rev_to_arpu::numeric, 2) end ,
+    case when (vas_cost_to_arpu = -999) then vas_cost_to_arpu else round(vas_cost_to_arpu::numeric, 2) end ,
+    case when (payg_data_rev_to_arpu = -999) then payg_data_rev_to_arpu else round(payg_data_rev_to_arpu::numeric, 2) end ,
+    case when (onnet_to_offnet_rev = -999) then onnet_to_offnet_rev else round(onnet_to_offnet_rev::numeric, 2) end ,
+    case when (arpu = -999) then arpu else round(arpu::numeric, 2) end ,
+    status,
+    peak_type_voice,
+    peak_type_data,
+    payment_type,
+    monthly_data_pkg_size,
+    is_multi_sim_phone,
+    arpu_segment,
+    case when (avg_monthly_topup_nmb = -999) then avg_monthly_topup_nmb else round(avg_monthly_topup_nmb::numeric, 2) end ,
+    case when (avg_monthly_topup_cost = -999) then avg_monthly_topup_cost else round(avg_monthly_topup_cost::numeric, 2) end ,
+    is_smart_phone_user,
+    brand,
+    model,
+    os,
+    age,
+    gender,
+    churn_propensity,
+    portout_propensity,
+    tenure,
+    portout_status,
+    subscriber_segment,
+    contact_cust_care_ntwk,
+    contact_cust_care_bill,
+    contact_cust_care_promo,
+    provience,
+    case when (avg_onnet_voice_min = -999) then avg_onnet_voice_min else round(avg_onnet_voice_min::numeric, 2) end ,
+    case when (avg_offnet_voice_min = -999) then avg_offnet_voice_min else round(avg_offnet_voice_min::numeric, 2) end ,
+    case when (avg_nmb_sms_sent = -999) then avg_nmb_sms_sent else round(avg_nmb_sms_sent::numeric, 2) end ,
+    case when (avg_data_usage = -999) then avg_data_usage else round(avg_data_usage::numeric, 2) end ,
+    case when (avg_business_voice_usage = -999) then avg_business_voice_usage else round(avg_business_voice_usage::numeric, 2) end ,
+    case when (avg_business_data_usage = -999) then avg_business_data_usage else round(avg_business_data_usage::numeric, 2) end ,
+    case when (avg_non_business_voice_usage = -999) then avg_non_business_voice_usage else round(avg_non_business_voice_usage::numeric, 2) end ,
+    case when (avg_non_business_data_usage = -999) then avg_non_business_data_usage else round(avg_non_business_data_usage::numeric, 2) end ,
+    special_segments,
+    b2b_service_subscription,
+    company_type,
+    b2b_segments,
+    industry,
+    enterprise_national_id,
+    case when (avg_daily_2g_data_usage = -999) then avg_daily_2g_data_usage else round(avg_daily_2g_data_usage::numeric, 2) end ,
+    case when (avg_daily_3g_data_usage = -999) then avg_daily_3g_data_usage else round(avg_daily_3g_data_usage::numeric, 2) end ,
+    case when (avg_daily_4g_data_usage = -999) then avg_daily_4g_data_usage else round(avg_daily_4g_data_usage::numeric, 2) end
+  FROM (
+    SELECT
+      *,
+      coalesce(pkg_to_payg_voice::text, '') ||
+      coalesce(pkg_to_payg_data::text, '') ||
+      coalesce(roam_int_rev_to_arpu::text, '') ||
+      coalesce(vas_cost_to_arpu::text, '') ||
+      coalesce(payg_data_rev_to_arpu::text, '') ||
+      coalesce(onnet_to_offnet_rev::text, '') ||
+      coalesce(arpu::text, '') ||
+      coalesce(status, '') ||
+      coalesce(peak_type_voice, '') ||
+      coalesce(peak_type_data, '') ||
+      coalesce(payment_type, '') ||
+      coalesce(monthly_data_pkg_size, '') ||
+      coalesce(is_multi_sim_phone, '') ||
+      coalesce(arpu_segment, '') ||
+      coalesce(avg_monthly_topup_nmb::text, '') ||
+      coalesce(avg_monthly_topup_cost::text, '') ||
+      coalesce(is_smart_phone_user, '') ||
+      coalesce(brand, '') ||
+      coalesce(model, '') ||
+      coalesce(os, '') ||
+      coalesce(age::text, '') ||
+      coalesce(gender, '') ||
+      coalesce(churn_propensity, '') ||
+      coalesce(portout_propensity, '') ||
+      coalesce(tenure::text, '') ||
+      coalesce(portout_status, '') ||
+      coalesce(subscriber_segment, '') ||
+      coalesce(contact_cust_care_ntwk::text, '') ||
+      coalesce(contact_cust_care_bill::text, '') ||
+      coalesce(contact_cust_care_promo::text, '') ||
+      coalesce(provience, '') ||
+      coalesce(avg_onnet_voice_min::text, '') ||
+      coalesce(avg_offnet_voice_min::text, '') ||
+      coalesce(avg_nmb_sms_sent::text, '') ||
+      coalesce(avg_data_usage::text, '') ||
+      coalesce(avg_business_voice_usage::text, '') ||
+      coalesce(avg_business_data_usage::text, '') ||
+      coalesce(avg_non_business_voice_usage::text, '') ||
+      coalesce(avg_non_business_data_usage::text, '') ||
+      coalesce(special_segments, '') ||
+      coalesce(b2b_service_subscription, '') ||
+      coalesce(company_type, '') ||
+      coalesce(b2b_segments, '') ||
+      coalesce(industry, '') ||
+      coalesce(enterprise_national_id, '') ||
+      coalesce(avg_daily_2g_data_usage::text, '') ||
+      coalesce(avg_daily_3g_data_usage::text, '') ||
+      coalesce(avg_daily_4g_data_usage::text, '')
+      AS concat_ws
+    FROM results.rtp_dump_delta
+    WHERE dump_id_y = $mod_job_id
+    AND dump_id_x IS NOT NULL
+  ) delta
+  WHERE concat_ws <> ''
+                </ItemQueryDelta>
+            </output_parameters>
         </GetQuery2>
         <Export_Delta_Dump>
+            <input_parameters>
+                <command>psql -d $AnalyticsDatabaseName -h $AnalyticsDatabaseHost -p $AnalyticsDatabasePort -U xsl -c "" COPY ($ItemQueryDelta) TO STDOUT DELIMITER AS ';' NULL AS '' "" > $LocalhostOutputPath/$DumpFileName$OutputFileTmp</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+            </output_parameters>
         </Export_Delta_Dump>
         <split>
             <when>parameter with name equal to exitstatus and str value not equal to 0</when>
@@ -7575,15 +8517,74 @@ END;
             <tasks>Convert_Fiels, join</tasks>
         </split>
         <Convert_Fiels>
+            <input_parameters>
+                <command>mv $LocalhostOutputPath/$DeltaFileName$OutputFileTmp $LocalhostOutputPath/$DeltaFileName; scp $LocalhostOutputPath/$DeltaFileName $OutputHostUsername@$OutputHost:$OutputHostPath/rtp_delta</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+            </output_parameters>
         </Convert_Fiels>
     </RTPOutputGenerateFlow_CSV>
     <Export_MCI>
         <Setup_Parameters>
+            <input_parameters>
+            </input_parameters>
+            <output_parameters>
+                <files_moved_to_error_msg>""</files_moved_to_error_msg>
+                <errors>0</errors>
+                <error_files_location>$LocalhostOutputPath/errors</error_files_location>
+                <delta_location>$LocalhostOutputPath</delta_location>
+                <archive_files_location>$LocalhostOutputPath/archive</archive_files_location>
+                <processed>0</processed>
+            </output_parameters>
         </Setup_Parameters>
         <List_new_input_files>
+            <input_parameters>
+                <command>(ls -A $delta_location | sort | grep 'rtd_dump_delta_') | cat</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+                <out_is_present>if (stdout.contains("N/A")) {false} else {true}</out_is_present>
+                <out>if (stdout.contains("N/A")) {new java.util.ArrayList();} else {stdout.split("\n")}</out>
+            </output_parameters>
         </List_new_input_files>
-        <List_precious_errors_files>
-        </List_precious_errors_files>
+        <List_previous_errors_files>
+            <input_parameters>
+                <command>(ls -A $error_files_location | sort ) | cat</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+                <err_is_present>if (stdout.contains("N/A")) {false} else {true}</out_is_present>
+                <err>if (stdout.contains("N/A")) {new java.util.ArrayList();} else {stdout.split("\n")}</out>
+            </output_parameters>
+        </List_previous_errors_files>
         <split>
             <when>Parameter with name equal to out_is_present and value equal to true</when>
             <tasks>split, Move_error_files_to_archive, join</tasks>
@@ -7597,10 +8598,56 @@ END;
             <tasks>join</tasks>
         </split>
         <Move_error_files_to_archive>
+            <input_parameters>
+                <command>mkdir -p $archive_files_location $$ mv $error_files_location/* $archive_files_location</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+                <err_out_is_present>if (stdout.contains("N/A")) {false} else {true}</out_is_present>
+                <err_out>if (stdout.contains("N/A")) {new java.util.ArrayList();} else {stdout.split("\n")}</out>
+            </output_parameters>
         </Move_error_files_to_archive>
         <RtpServiceTask>
+            <input_parameters>
+                <error_file_path>$error_files_location/$folder</error_file_path>
+                <input_file_path>$delta_location/$folder</input_file_path>
+                <mapping_src>https://10.19.129.75:11150/resources/mapping_rtd.json</mapping_src>
+                <rtp_sertvice_url>http://localhost:8084</rtp_sertvice_url>
+                <timeout_seconds></timeout_seconds>
+            </input_parameters>
+            <output_parameters>
+                <failed_profiles_count></failed_profiles_count>
+                <processed_profiles_count></processed_profiles_count>
+            </output_parameters>
         </RtpServiceTask>
         <Remove_File>
+            <input_parameters>
+                <command>rm -rf $delta_location/$folder</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+                <errors>errors + failed_profiles_count</errors>
+                <out>stdout.split("\n")</out>
+                <processed>processed + processed_profiles_count</processed>
+            </output_parameters>
         </Remove_File>
         <Set_checkpoint_message>
         </Set_checkpoint_message>
@@ -7613,8 +8660,37 @@ END;
         <Set_checkpoint_message>
         </Set_checkpoint_message>
         <RtpServiceTask>
+            <input_parameters>
+                <error_file_path>$error_files_location/$folder</error_file_path>
+                <input_file_path>$error_files_location/$folder</input_file_path>
+                <mapping_src>https://10.19.129.75:11150/resources/mapping_rtd.json</mapping_src>
+                <rtp_sertvice_url>http://localhost:8084</rtp_sertvice_url>
+                <timeout_seconds></timeout_seconds>
+            </input_parameters>
+            <output_parameters>
+                <failed_profiles_count></failed_profiles_count>
+                <processed_profiles_count></processed_profiles_count>
+            </output_parameters>
         </RtpServiceTask>
         <Remove_error_file>
+            <input_parameters>
+                <command>rm -rf $error_files_location/$file</command>
+                <host>localhost</host>
+                <identity></identity>
+                <password>$LocalhostPassword</password>
+                <std.err.file></stderr.file>
+                <stdout.file></stdout.file>
+                <timeout>20000</timeout>
+                <username>$LocalhostUsername</username>
+            </input_parameters>
+            <output_parameters>
+                <exitstatus></exitstatus>
+                <stderr></stderr>
+                <stdout></stdout>
+                <errors>errors + failed_profiles_count</errors>
+                <out>stdout.split("\n")</out>
+                <processed>processed + processed_profiles_count</processed>
+            </output_parameters>
         </Remove_error_file>
         <Set_checkpoint_message>
         </Set_checkpoint_message>

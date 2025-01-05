@@ -1651,5 +1651,109 @@ BEGIN
 
 
 =========================================================
+function work.check_fitted_model_availability
+
+>> old_version
+
+
+CREATE FUNCTION check_fitted_model_availability(model_fitting boolean) RETURNS boolean
+    AS $$
+
+/* SUMMARY
+ * This function checks, if there already is a fitted model, returns true if not.
+ *
+ * VERSION
+ * 14.06.2013 KL  
+ */
+
+DECLARE
+
+  mod_job_id_fit integer;
+  fitting  boolean;
+  
+BEGIN
+
+  IF NOT model_fitting THEN
+
+      mod_job_id_fit := a.mod_job_id 
+      FROM work.module_job_parameters a
+      JOIN work.module_job_parameters b
+      ON a.mod_job_id=b.mod_job_id
+      JOIN work.module_models c
+      ON b.value=c.model_id
+      WHERE a.key = 'run_type'
+      AND a.value ~ 'Fit'
+      AND b.key ~ 'model_id'
+      AND c.key ~ 'intercept'
+      LIMIT 1; 
+
+    IF mod_job_id_fit IS NULL THEN
+      fitting = true;
+    ELSE 
+      fitting = false;
+    END IF;
+
+  ELSE
+    fitting = model_fitting;
+  END IF;
+  
+  RETURN fitting;
+
+END;
+
+$$
+    LANGUAGE plpgsql NO SQL;
+
+
+
+<< new_version
+
+CREATE FUNCTION check_fitted_model_availability(model_fitting boolean) RETURNS boolean
+    AS $$
+
+/* SUMMARY
+ * This function checks, if there already is a fitted model, returns true if not.
+ *
+ * VERSION
+ * 14.06.2013 KL  
+ */
+
+DECLARE
+
+  mod_job_id_fit integer;
+  fitting  boolean;
+  
+BEGIN
+
+  IF NOT model_fitting THEN
+
+      mod_job_id_fit := a.mod_job_id 
+      FROM work.module_job_parameters a
+      JOIN work.module_job_parameters b
+      ON a.mod_job_id=b.mod_job_id
+      JOIN work.module_models c
+      ON b.value=c.model_id::text
+      WHERE a.key = 'run_type'
+      AND a.value ~ 'Fit'
+      AND b.key ~ 'model_id'
+      AND c.key ~ 'intercept'
+      LIMIT 1; 
+
+    IF mod_job_id_fit IS NULL THEN
+      fitting = true;
+    ELSE 
+      fitting = false;
+    END IF;
+
+  ELSE
+    fitting = model_fitting;
+  END IF;
+  
+  RETURN fitting;
+
+END;
+
+$$
+    LANGUAGE plpgsql NO SQL;
 
 

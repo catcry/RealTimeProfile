@@ -126,5 +126,7 @@ coalesce(aa.alias_b,355497879) as alias_b, --temp fix for null alias_b in data c
 
 
 
+===========================================
 
+we should chenge the {{ var.value.workflow_run_id }} to {{ run_id }}
 
