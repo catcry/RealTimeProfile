@@ -1,0 +1,138 @@
+.grid-container {
+    max-width: 80%;
+    margin: auto;
+    display: grid;
+    grid-template-columns: 20% 60% 20%;
+    /*background-color: #2196F3;*/
+    padding: 20px;
+    border: 1px solid #85addb;
+    border-radius: 10px;
+    background-color: #ccd5df;
+}
+
+.container {
+    max-width: 80%;
+    grid-template-columns: 100%;
+    margin: auto;
+    display: grid;
+    padding: 20px;
+    /*border: 1px solid #c7c8e9;*/
+    border: 1px solid #85addb;
+    border-radius: 10px;
+    background-color: #ccd5df;
+}
+
+
+.grid-item {
+    /*background-color: rgba(255, 255, 255, 0.8);*/
+    align-content: center;
+    padding: 20px;
+    font-size: 30px;
+    text-align: center;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+}
+
+h2 {
+    color: #333;
+}
+
+.form {
+    max-width: 60%;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background-color: #f9f9f9;
+}
+form {
+    max-width: 60%;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background-color: #f9f9f9;
+}
+
+label {
+    display: block;
+    margin: 10px 0 5px;
+}
+
+input[type="text"], input[type="submit"] {
+    width: 90%;
+    padding: 10px;
+    margin: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+input[type="submit"], button {
+    background-color: #4588d6;
+    color: white;
+    max-width: 40%;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-size: large;
+}
+
+
+input[type="submit"], button :hover {
+    background-color: #4588d6;
+}
+
+input[type="radio"] {
+    margin: auto 2%;
+}
+
+.required-star {
+    color: red;
+}
+
+.container-title {
+    max-width: 80%;
+    margin: auto;
+    display: grid;
+    grid-template-columns: 20% 60% 20%;
+    /*background-color: #2196F3;*/
+    padding: 10px;
+    border: 1px solid #85addb;
+    border-radius: 10px;
+    background-color: #ccd5df;
+}
+
+.container-1 {
+    /*max-width: 80%;*/
+    display: flex;
+    justify-content: left;
+    margin: auto 10%;
+}
+
+.hidden {
+    display: none;
+}
+
+.visible {
+    display: block;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table, th, td {
+    border: 1px solid #85addb;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
