@@ -19,6 +19,8 @@
 # 2012-20-26 JTI
 # 2017-04-30 LZu: added file inputs. full set of files except topup and portability. device only loaded once. no blacklist files.
 # 2017-09-10 LZu: changes as per FS 1.7 and items only delivered once like lookups are not included here, changed validation script
+# 2025-02-01 catcry: CRM CUST_PROFILE files loader separated from rest of the files and a new loader script load_raw_data_cust_profile.sh is added to the scripts to load unzipped files.
+
 set -e
 
 printFunc() {
@@ -39,6 +41,7 @@ SCRIPT_PATH=$(dirname "$(readlink -f "$0")")	# Local path on database front serv
 LOAD_DATA_SCRIPT="$SCRIPT_PATH/load_raw_data.sh"			# A sub-script that is executed from this main script several times
 LOAD_DATA_CRMDUMP_SCRIPT="$SCRIPT_PATH/load_raw_data_crm.sh"		# customized script for loading crm dump zip files and do ETL conversion for file.
 LOAD_DATA_PRODUCT_SCRIPT="$SCRIPT_PATH/load_raw_data_prod_takeup.sh"	# customized script for loading product takeup zip files and do ETL conversion for file.
+LOAD_DATA_CUST_PROFILE_SCRIPT="$SCRIPT_PATH/load_raw_data_cust_profile.sh"	# customized script for loading Unzipped and Concatenated CUST_PROFILE Files.
 DATA_NULL_CHAR=""				# A character that is used if field is empty
 UNCOMP_SOFT="gunzip"				# A software used to uncompress raw data files, for example gunzip (.gz) or bunzip2 (.bunzip2)
 #DATA_COLUMN_DELIMITER=","			# A character that is used as a field separator in the raw data files
@@ -248,6 +251,9 @@ for (( i=0; i<${COUNT_DATA_SOURCES}; i++ )); do
   elif [[ "${DATA_FILES[$i]}" == churn_hourly* ]]
   then
     $LOAD_DATA_PRODUCT_SCRIPT "$DATASTORE_SSH" $INPUT_PATH "${DATA_FILES[$i]}" $UNCOMP_SOFT $INPUT_PATH "$DATA_COLUMN_DELIMITER" "$DATA_NULL_CHAR" ${DB_TABLES[$i]} $DB_NAME $DB_HOST $DB_PORT $DB_USER
+  elif [[ "${DATA_FILES[$i]}" == RTD_CUSTPROFILE* ]]
+  then # the UNCOMP_SOFT variable is passed ot the cust_profile script but in the script it is not used.
+    $LOAD_DATA_CUST_PROFILE_SCRIPT "$DATASTORE_SSH" $INPUT_PATH "${DATA_FILES[$i]}" $UNCOMP_SOFT $INPUT_PATH "$DATA_COLUMN_DELIMITER" "$DATA_NULL_CHAR" ${DB_TABLES[$i]} $DB_NAME $DB_HOST $DB_PORT $DB_USER
   else
     $LOAD_DATA_SCRIPT "$DATASTORE_SSH" $INPUT_PATH "${DATA_FILES[$i]}" $UNCOMP_SOFT $INPUT_PATH "$DATA_COLUMN_DELIMITER" "$DATA_NULL_CHAR" ${DB_TABLES[$i]} $DB_NAME $DB_HOST $DB_PORT $DB_USER
   fi
