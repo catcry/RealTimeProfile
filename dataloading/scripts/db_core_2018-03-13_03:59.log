@@ -1,0 +1,858 @@
+date
+Database creation started.
+Create database and base level tables, views, and functions.
+==start to create database mci_chm_gp ==
+Create database : psql -d postgres -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -c "create database mci_chm_gp;"
+CREATE DATABASE
+Create language : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -c "create language plpgsql;"
+NOTICE:  language "plpgsql" already exists, skipping
+CREATE LANGUAGE
+Create user with password : user xsl with login password 'xsl@gp'
+DROP FUNCTION
+Grant privileges : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -c "grant all on database mci_chm_gp to xsl;"
+GRANT
+==start to create tables ==
+Command : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f core_db_schema_tables.sql
+CREATE FUNCTION
+ALTER FUNCTION
+ install_check 
+---------------
+ 
+(1 row)
+
+DROP FUNCTION
+CREATE SCHEMA
+ALTER SCHEMA
+CREATE SCHEMA
+ALTER SCHEMA
+CREATE SCHEMA
+ALTER SCHEMA
+CREATE SCHEMA
+ALTER SCHEMA
+psql:core_db_schema_tables.sql:58: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "partition_date_tables_pkey" for table "partition_date_tables"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:68: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "partition_period_tables_pkey" for table "partition_period_tables"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:78: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "partition_date_create_times_pkey" for table "partition_date_create_times"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:88: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "partition_period_create_times_pkey" for table "partition_period_create_times"
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:112: NOTICE:  CREATE TABLE will create implicit sequence "network_list_net_id_seq" for serial column "network_list.net_id"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:147: NOTICE:  CREATE TABLE will create partition "in_split_weekly_1_prt_187401" for table "in_split_weekly"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:core_db_schema_tables.sql:184: NOTICE:  CREATE TABLE will create partition "in_split_aggregates_1_prt_187401" for table "in_split_aggregates"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:core_db_schema_tables.sql:211: NOTICE:  CREATE TABLE will create partition "call_types_weekly_1_prt_1874-04-25" for table "call_types_weekly"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:332: NOTICE:  CREATE TABLE will create partition "crm_1_prt_1874-04-25" for table "crm"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:core_db_schema_tables.sql:367: NOTICE:  CREATE TABLE will create partition "in_crm_1_prt_1874-04-25" for table "in_crm"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:core_db_schema_tables.sql:379: NOTICE:  CREATE TABLE / UNIQUE will create implicit index "crm_snapshot_date_inserted_mapping_date_inserted_key" for table "crm_snapshot_date_inserted_mapping"
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:464: NOTICE:  CREATE TABLE will create partition "cdr_1_prt_1874-04-25" for table "cdr"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:559: NOTICE:  CREATE TABLE will create partition "topup_1_prt_1874-04-25" for table "topup"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:635: NOTICE:  CREATE TABLE will create partition "product_1_prt_1874-04-25" for table "product"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:core_db_schema_tables.sql:653: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "processed_files_pkey" for table "processed_files"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:665: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "processed_data_pkey" for table "processed_data"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:673: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "failed_rows_stats_pkey" for table "failed_rows_stats"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:686: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "crm_statistics_pkey" for table "crm_statistics"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:702: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "cdr_weekly_statistics_pkey" for table "cdr_weekly_statistics"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:720: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "data_usage_weekly_stats_pkey" for table "data_usage_weekly_stats"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:735: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "topup_statistics_pkey" for table "topup_statistics"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:749: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "data_quality_pkey" for table "data_quality"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:762: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "data_quality_pkey" for table "data_quality"
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:773: NOTICE:  CREATE TABLE will create implicit sequence "string_id_alias_id_seq" for serial column "string_id.alias_id"
+psql:core_db_schema_tables.sql:773: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "string_id_pkey" for table "string_id"
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:core_db_schema_tables.sql:883: NOTICE:  CREATE TABLE will create implicit sequence "validation_errors_id_seq" for serial column "validation_errors.id"
+psql:core_db_schema_tables.sql:883: NOTICE:  CREATE TABLE will create partition "validation_errors_1_prt_1874-04-25" for table "validation_errors"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+==start to create functions ==
+Command : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f core_db_schema_functions.sql
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+==end to create basic schema==
+The date now is Tue Mar 13 04:00:05 PDT 2018
+Create views and functions related to SL analytics modules.
+==start to install modules into database mci_chm_gp ==
+Create module tables : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f modules_db_schema_tables.sql
+CREATE FUNCTION
+ALTER FUNCTION
+ install_check 
+---------------
+ 
+(1 row)
+
+DROP FUNCTION
+CREATE SCHEMA
+ALTER SCHEMA
+CREATE SCHEMA
+ALTER SCHEMA
+CREATE SCHEMA
+ALTER SCHEMA
+psql:modules_db_schema_tables.sql:50: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "partition_sequence_tables_pkey" for table "partition_sequence_tables"
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:61: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "partition_sequence_create_times_pkey" for table "partition_sequence_create_times"
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:84: NOTICE:  CREATE TABLE will create partition "aliases_1_prt_0" for table "aliases"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:100: NOTICE:  CREATE TABLE will create partition "out_network_1_prt_0" for table "out_network"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:122: NOTICE:  CREATE TABLE will create partition "out_scores_1_prt_0" for table "out_scores"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:138: NOTICE:  CREATE TABLE will create partition "w_sym_network_1_prt_0" for table "w_sym_network"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:164: NOTICE:  CREATE TABLE will create partition "module_targets_1_prt_0" for table "module_targets"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:177: NOTICE:  CREATE TABLE will create partition "module_targets_tmp_1_prt_0" for table "module_targets_tmp"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:203: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "module_job_parameters_pkey" for table "module_job_parameters"
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:218: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "scoring_muc_parameters_pkey" for table "scoring_muc_parameters"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 16
+psql:modules_db_schema_tables.sql:255: NOTICE:  CREATE TABLE will create partition "module_model_output_1_prt_0" for table "module_model_output"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:273: NOTICE:  CREATE TABLE will create partition "module_model_output_variable_group_1_prt_0" for table "module_model_output_variable_group"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:291: NOTICE:  CREATE TABLE will create partition "module_results_vargroup_tmp_1_prt_0" for table "module_results_vargroup_tmp"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:321: NOTICE:  CREATE TABLE will create partition "module_results_variable_group_1_prt_0" for table "module_results_variable_group"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:358: NOTICE:  CREATE TABLE will create partition "module_results_1_prt_0" for table "module_results"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:375: NOTICE:  CREATE TABLE will create partition "module_results_tmp_1_prt_0" for table "module_results_tmp"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:391: NOTICE:  CREATE TABLE will create partition "module_influences_1_prt_0" for table "module_influences"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:406: NOTICE:  CREATE TABLE will create partition "network_roles_1_prt_0" for table "network_roles"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE SEQUENCE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:467: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_1_1_prt_0" for table "modelling_data_matrix_1"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:488: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_2_1_prt_0" for table "modelling_data_matrix_2"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:537: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_3_1_prt_0" for table "modelling_data_matrix_3"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:606: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_4_made_1_prt_0" for table "modelling_data_matrix_4_made"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:648: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_4_rec_1_prt_0" for table "modelling_data_matrix_4_rec"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:689: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_topup1_1_prt_0" for table "modelling_data_matrix_topup1"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:709: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_topup2_1_prt_0" for table "modelling_data_matrix_topup2"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:728: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_topup_channel_1_prt_0" for table "modelling_data_matrix_topup_channel"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:760: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_topup3_1_prt_0" for table "modelling_data_matrix_topup3"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:794: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_topup3a_1_prt_0" for table "modelling_data_matrix_topup3a"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:816: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_handset_topic_1_prt_0" for table "modelling_data_matrix_handset_topic"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:848: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_zdp1_1_prt_0" for table "modelling_data_matrix_zdp1"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:868: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_zdp2_1_prt_0" for table "modelling_data_matrix_zdp2"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:887: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_zdp4_1_prt_0" for table "modelling_data_matrix_zdp4"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1148: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_1_prt_0" for table "modelling_data_matrix"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1171: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_cell_events_topic_1_prt_0" for table "modelling_data_matrix_cell_events_topic"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1205: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "module_results_verification_pkey" for table "module_results_verification"
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1235: NOTICE:  CREATE TABLE will create partition "descriptive_variables_community_1_prt_0" for table "descriptive_variables_community"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1248: NOTICE:  CREATE TABLE will create implicit sequence "descriptive_variables_list_var_id_seq" for serial column "descriptive_variables_list.var_id"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 59
+psql:modules_db_schema_tables.sql:1324: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_1_prt_0" for table "descriptive_variables_subscriber"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1338: NOTICE:  CREATE TABLE will create partition "out_network_raw_1_prt_0" for table "out_network_raw"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1355: NOTICE:  CREATE TABLE will create partition "descriptive_variables_community_matrix_1_prt_0" for table "descriptive_variables_community_matrix"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1403: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_1a_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_1a"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1417: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_1b_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_1b"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1431: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_1c_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_1c"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1453: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_2a_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_2a"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1467: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_2b_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_2b"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1481: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_2c_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_2c"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1495: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_base_2d_1_prt_0" for table "descriptive_variables_subscriber_matrix_base_2d"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1520: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_topup_1_prt_0" for table "descriptive_variables_subscriber_matrix_topup"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1594: NOTICE:  CREATE TABLE will create partition "descriptive_variables_subscriber_matrix_1_prt_0" for table "descriptive_variables_subscriber_matrix"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1610: NOTICE:  CREATE TABLE will create partition "module_influence_from_a_to_b_1_prt_0" for table "module_influence_from_a_to_b"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE SEQUENCE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1640: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "lda_input_parameters_pkey" for table "lda_input_parameters"
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1649: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "lda_output_parameters_pkey" for table "lda_output_parameters"
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1659: NOTICE:  CREATE TABLE will create partition "lda_input_1_prt_0" for table "lda_input"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1673: NOTICE:  CREATE TABLE will create partition "lda_output_1_prt_0" for table "lda_output"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1687: NOTICE:  CREATE TABLE will create partition "lda_output_doc_topic_1_prt_0" for table "lda_output_doc_topic"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1700: NOTICE:  CREATE TABLE will create partition "lda_models_topic_term_1_prt_0" for table "lda_models_topic_term"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1713: NOTICE:  CREATE TABLE will create partition "lda_models_doc_topic_1_prt_0" for table "lda_models_doc_topic"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:1727: NOTICE:  CREATE TABLE will create partition "lda_distribution_change_1_prt_0" for table "lda_distribution_change"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1758: NOTICE:  CREATE TABLE will create partition "modelling_data_matrix_geolocation_1_prt_0" for table "modelling_data_matrix_geolocation"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE SEQUENCE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+INSERT 0 12
+CREATE TABLE
+ALTER TABLE
+INSERT 0 99
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+INSERT 0 6
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:1983: NOTICE:  CREATE TABLE will create implicit sequence "differentiating_factors_var_id_seq" for serial column "differentiating_factors.var_id"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 56
+psql:modules_db_schema_tables.sql:2070: NOTICE:  CREATE TABLE will create partition "module_export_churn_inactivity_1_prt_0" for table "module_export_churn_inactivity"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:2091: NOTICE:  CREATE TABLE will create partition "module_export_churn_postpaid_1_prt_0" for table "module_export_churn_postpaid"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:2114: NOTICE:  CREATE TABLE will create partition "module_export_product_1_prt_0" for table "module_export_product"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:2193: NOTICE:  CREATE TABLE will create partition "module_export_sni_1_prt_0" for table "module_export_sni"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:2217: NOTICE:  CREATE TABLE will create partition "module_export_zero_day_prediction_1_prt_0" for table "module_export_zero_day_prediction"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:2239: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "product_information_pkey" for table "product_information"
+CREATE TABLE
+ALTER TABLE
+psql:modules_db_schema_tables.sql:2261: NOTICE:  CREATE TABLE will create partition "monthly_arpu_1_prt_0" for table "monthly_arpu"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:2281: NOTICE:  CREATE TABLE will create partition "tenure_days_1_prt_0" for table "tenure_days"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+psql:modules_db_schema_tables.sql:2300: NOTICE:  CREATE TABLE will create partition "target_control_groups_1_prt_0" for table "target_control_groups"
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+ALTER TABLE
+Create module functions : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f modules_db_schema_functions.sql
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+psql:modules_db_schema_functions.sql:6429: NOTICE:  aggregate core.commacat_all(pg_catalog.float8) does not exist, skipping
+DROP AGGREGATE
+CREATE AGGREGATE
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+DROP FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+Create module views : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f modules_db_schema_views.sql
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+CREATE VIEW
+ALTER TABLE
+Create descriptive variable functions : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f descriptivevariables_db_schema_functions.sql
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+Create template models : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f insert_churn_inactivity_template_model.sql
+CREATE FUNCTION
+ALTER FUNCTION
+ insert_churn_inactivity_template_model 
+----------------------------------------
+ 
+(1 row)
+
+Create template models : psql -d mci_chm_gp -h 10.115.26.53 -p 5432 -U gpadmin --set ON_ERROR_STOP=1 -f insert_churn_postpaid_template_model.sql
+CREATE FUNCTION
+ALTER FUNCTION
+ insert_churn_postpaid_template_model 
+--------------------------------------
+ 
+(1 row)
+
+==end of modules schema creation ==
+The date now is Tue Mar 13 04:00:19 PDT 2018
+date
+Database creation finished.
