@@ -1,3 +1,9 @@
+core_categorybean should change manually or what????
+
+
+
+
+=========================================================================
 when we create the database mci_chm_gp there is already some partitions for tables.
 we can see that with this query:
 
@@ -130,3 +136,36 @@ coalesce(aa.alias_b,355497879) as alias_b, --temp fix for null alias_b in data c
 
 we should chenge the {{ var.value.workflow_run_id }} to {{ run_id }}
 
+
+
+===========================================================
+
+in work.scoring_muc_parameters table in production there is some data but i cant find the insert statement.
+
+and i insert some data in it like mci version. this is the data:
+
+gap_length,7,product
+gap_length,7,postpaid
+target_period_length,14,product
+target_period_length,14,postpaid
+uc_zero_day_prediction_evaluation_period_length,56,zero_day
+crm_data_age,40,common
+evaluation_period_length,28,inactivity
+evaluation_period_length,0,portout
+gap2_length,0,portout
+gap2_length,0,inactivity
+gap_length,0,inactivity
+gap_length,0,portout
+lag_count,4,common
+max_data_age,15,common
+n_cell_events_topics,6,common
+n_handset_topics,6,common
+post_source_period_length,42,common
+source_period_length,84,common
+target_period_length,14,inactivity
+target_period_length,14,portout
+
+
+
+
+is that ok?

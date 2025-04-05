@@ -1,0 +1,9 @@
+update work.scoring_muc_parameters set para_value = '2' where scoring_paras = 'source_period_length' and use_case = 'common'
+
+this must be 84
+
+
+=======================================================================
+
+
+

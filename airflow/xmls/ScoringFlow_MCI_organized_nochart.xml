@@ -406,12 +406,12 @@ SELECT * FROM work.initialize_portout(
                 <output_parameters>
             </initialize_portout>
         </Run_initialize_MCI>
-        <split:calculate_initialize_MCI>
+        <split:calculate_targets>
             <when>parameter with name equal to calculate_targets and str value equal to true</when>
             <tasks>Run_targets_MCI, join</tasks>
             <when>parameter with name equal to calculate_targets and str value equal to false</when>
             <tasks>join</tasks>
-        </split:calculate_initialize_MCI>
+        </split:calculate_targets>
         <run_targets_MCI>
             <split>
                 <when></when>
