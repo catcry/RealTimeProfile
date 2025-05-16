@@ -41,7 +41,7 @@ with DAG(
 
     run_data_loader = BashOperator(
     task_id='run_data_loader',
-    bash_command='ssh gpadmin@192.168.5.231 "nohup bash /home/gpadmin/dataloading/database_loader.sh {{ var.value.workflow_run_id }}"',
+    bash_command='ssh gpadmin@192.168.5.190 "nohup bash /home/gpadmin/dataloading/database_loader.sh {{ var.value.workflow_run_id }}"',
     do_xcom_push = True,
     dag=dag
     )

@@ -28,6 +28,8 @@ with DAG(
     catchup=False
 ) as dag:
     
+
+
     sleep_task = BashOperator(
         task_id='sleep_task',
         bash_command='sleep 3'
@@ -286,7 +288,7 @@ with DAG(
                 Variable.set("network_weeks", xcom_value[2][0])
                 Variable.set("t1", xcom_value[3][0])
                 Variable.set("t2", xcom_value[4][0])
-                Variable.set("lag_count1", xcom_value[5][0])
+                Variable.set("lag_count", xcom_value[5][0])
                 Variable.set("lag_length", xcom_value[6][0])
                 Variable.set("source_period_length", xcom_value[7][0])
                 Variable.set("calculate_predictors", xcom_value[8][0])
@@ -614,7 +616,7 @@ with DAG(
             if Variable.get("calculate_targets") == "true":
                 return 'Run_MCI2.join6'
             else:
-                return 'Run_MCI2.join7'
+                return 'Run_MCI2.branching_calculate_predictors'
             
         branching_calculate_targets = BranchPythonOperator(
                 task_id='branching_calculate_targets',
@@ -623,8 +625,24 @@ with DAG(
                 dag=dag
             )
         
+
+        def split_calculate_predictors_function():
+            if Variable.get("calculate_predictors") == "true":
+                return 'Run_MCI2.join7'
+            else:
+                return 'Run_MCI2.join8'
+            
+        branching_calculate_predictors = BranchPythonOperator(
+                task_id='branching_calculate_predictors',
+                python_callable=split_calculate_predictors_function,
+                trigger_rule="all_done",
+                dag=dag
+            )
+
+        
         join6 = EmptyOperator(task_id="join6", dag=dag)
         join7 = EmptyOperator(task_id="join7", dag=dag)
+        join8 = EmptyOperator(task_id="join8", dag=dag)
 
         with TaskGroup("Run_targets_MCI", tooltip="Run_targets_MCI") as Run_targets_MCI:
 
@@ -800,9 +818,180 @@ with DAG(
             join5 >> combine_target_lists
 
 
-
+        
         
 
+        with TaskGroup("Run_predictors_MCI", tooltip="Run_predictors_MCI") as Run_predictors_MCI:
+
+            with TaskGroup("CalculateCommonPredictors_MCI_nogeoloc", tooltip="CalculateCommonPredictors_MCI_nogeoloc") as CalculateCommonPredictors_MCI_nogeoloc:
+                def Disable_LDA_Predictors_function():
+                    variables_dict = {
+                    "calculate_lda_cell_events_predictors": "false",
+                    "run_lda_cell_events": "false",
+                    "run_lda": "false",
+                    "calculate_lda_predictors":"false"
+                    }
+
+                    for key, value in variables_dict.items():  
+                    
+                        Variable.set(key, value)
+
+                Disable_LDA_Predictors = PythonOperator(
+                    task_id='Disable_LDA_Predictors',
+                    python_callable=Disable_LDA_Predictors_function,
+                    dag=dag
+                )
+
+                split = EmptyOperator(task_id="split", dag=dag)
+
+                
+
+
+                create_predictors1 = PostgresOperator(
+                    task_id='create_predictors1',
+                    sql="select * from work.create_modelling_data1({{ var.value.mod_job_id | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+                create_predictors4_made = PostgresOperator(
+                    task_id='create_predictors4_made',
+                    sql="select * from work.create_modelling_data4_made({{ var.value.mod_job_id | int }}, {{ var.value.lag_length | int }}, {{ var.value.lag_count | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+                create_predictors4_rec = PostgresOperator(
+                    task_id='create_predictors4_rec',
+                    sql="select * from work.create_modelling_data4_rec({{ var.value.mod_job_id | int }}, {{ var.value.lag_length | int }}, {{ var.value.lag_count | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+                create_predictors_topup1 = PostgresOperator(
+                    task_id='create_predictors_topup1',
+                    sql="select * from work.create_modelling_data_topup1({{ var.value.mod_job_id | int }}, {{ var.value.lag_length | int }}, {{ var.value.lag_count | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+                create_predictors_topup2 = PostgresOperator(
+                    task_id='create_predictors_topup2',
+                    sql="select * from work.create_modelling_data_topup2({{ var.value.mod_job_id | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+                create_predictors_topup3 = PostgresOperator(
+                    task_id='create_predictors_topup3',
+                    sql="select * from work.create_modelling_data_topup3({{ var.value.mod_job_id | int }}, {{ var.value.lag_length | int }}, {{ var.value.lag_count | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+
+                create_predictors_topup_channels = PostgresOperator(
+                    task_id='create_predictors_topup_channels',
+                    sql="select * from work.create_modelling_data_topup_channels({{ var.value.mod_job_id | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+
+
+                calculate_monthly_arpu = PostgresOperator(
+                    task_id='calculate_monthly_arpu',
+                    sql="select * from work.calculate_monthly_arpu({{ var.value.mod_job_id | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+
+
+
+                send_email3 = EmailOperator( 
+                    task_id='send_email3', 
+                    to='tahamiri02@gmail.com', 
+                    subject='FAA Scoring run',
+                    html_content='starting network_scorer {{ var.value.t2 }}' 
+                )
+
+
+
+                we_should_create_orbiret_task_check_the_xml_file = EmptyOperator(task_id="we_should_create_orbiret_task_check_the_xml_file", dag=dag)
+
+
+                send_email4 = EmailOperator( 
+                    task_id='send_email4', 
+                    to='tahamiri02@gmail.com', 
+                    subject='FAA Scoring run',
+                    html_content='finished network_scorer {{ var.value.t2 }}' 
+                )
+
+
+                join = EmptyOperator(task_id="join", dag=dag)
+
+
+                create_predictors_2 = PostgresOperator(
+                    task_id='create_predictors_2',
+                    sql="select * from work.create_modelling_data2({{ var.value.mod_job_id | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+
+
+                create_predictors_3 = PostgresOperator(
+                    task_id='create_predictors_3',
+                    sql="select * from work.create_modelling_data3({{ var.value.mod_job_id | int }})",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+
+
+                Combine_modelling_data = PostgresOperator(
+                    task_id='Combine_modelling_data',
+                    sql="""SELECT * FROM work.combine_modelling_data(
+                                {{ var.value.mod_job_id | int }},
+                                'work.modelling_data_matrix',
+                                'work.module_targets,
+                                work.modelling_data_matrix_1,
+                                work.modelling_data_matrix_geolocation,
+                                work.modelling_data_matrix_2,
+                                work.modelling_data_matrix_3,
+                                work.modelling_data_matrix_4_made,
+                                work.modelling_data_matrix_4_rec,
+                                work.modelling_data_matrix_topup1,
+                                work.modelling_data_matrix_topup2,
+                                work.modelling_data_matrix_topup3,
+                                work.modelling_data_matrix_topup3a,
+                                work.modelling_data_matrix_cell_events_topic,
+                                work.modelling_data_matrix_handset_topic,
+                                work.modelling_data_matrix_zdp1,
+                                work.modelling_data_matrix_zdp2,
+                                work.modelling_data_matrix_zdp4',
+                                'mod_job_id,alias_id');""",
+                    postgres_conn_id='greenplum_conn',
+                    dag=dag
+                )
+
+
+                
+
+
+
+
+                Disable_LDA_Predictors >> split 
+                split >> create_predictors1
+                split >> calculate_monthly_arpu
+                create_predictors1 >> create_predictors4_made >> create_predictors4_rec >> create_predictors_topup1 >> create_predictors_topup2 >> create_predictors_topup3 >> create_predictors_topup_channels
+                calculate_monthly_arpu >> send_email3 >> we_should_create_orbiret_task_check_the_xml_file >> send_email4
+                create_predictors_topup_channels >> join
+                send_email4 >> join
+                join >> create_predictors_2 >> create_predictors_3 >> Combine_modelling_data
+            CalculateCommonPredictors_MCI_nogeoloc
+                
 
 
 
@@ -816,9 +1005,12 @@ with DAG(
             
         Init_Datasource1 >> Run_Initialize_MCI >> branching_calculate_targets
         branching_calculate_targets >> join6
-        branching_calculate_targets >> join7
+        branching_calculate_targets >> branching_calculate_predictors
         join6 >> Run_targets_MCI
-        Run_targets_MCI >> join7
+        Run_targets_MCI >> branching_calculate_predictors
+        branching_calculate_predictors >> join7
+        branching_calculate_predictors >> join8
+        join7 >> Run_predictors_MCI >> join8
         
 
         

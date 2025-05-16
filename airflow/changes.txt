@@ -1764,3 +1764,1081 @@ $$
 select setval('work.module_sequence', 418, true);
 
 they create partition for 417, 418??
+
+
+
+=========================================================
+
+function work.create_modelling_data2        
+
+old_version
+
+CREATE FUNCTION create_modelling_data2(in_mod_job_id integer) RETURNS text
+    AS $$
+
+/* SUMMARY
+ * This function processes modelling variables that are aggregates over
+ * neighbour data. If model_id is available in work.module_job_parameters table, then
+ * only the variables that the model use are processed. Otherwise, all variables
+ * are processed. Results go to work.modelling_data_matrix_2. 
+ *
+ * INPUT
+ * Identifier of module job
+ *
+ * OUTPUT
+ * Query by which this function has inserted data into
+ * work.modelling_data_matrix_2 table
+ *
+ * VERSION
+ * 04.06.2014 HMa - ICIF-181 Stack removal
+ * 13.05.2013 KL  - Added secondary network knn_2 to modelling_variables and data
+ * 06.03.2013 MOJ - ICIF-112
+ * 17.01.2013 HMa - Removed job_type 
+ * 15.01.2013 HMa - ICIF-97
+ * 22.02.2012 TSi - Bug 841 fixed
+ * 17.10.2011 TSi - Bug 742 fixed
+ * 01.10.2010 TSi - Bugs 225 and 175 fixed
+ * 16.09.2010 TSi - Bug 208 fixed
+ * 14.06.2010 TSi - Bug 188 fixed
+ * 19.04.2010 TSi - Bug 177 fixed
+ * 19.04.2010 JMa
+ */
+
+DECLARE
+
+  t1_text text := (
+    SELECT DISTINCT 'to_date('''||mjp.value||''', ''YYYY-MM-DD'')'
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't1'
+  );
+  t2_text text := (
+    SELECT DISTINCT 'to_date('''||mjp.value||''', ''YYYY-MM-DD'')'
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't2'
+  );
+  t1_week text := (
+    SELECT DISTINCT core.date_to_yyyyww(mjp.value::date)::text
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't1'
+  );
+  t2_week text := (
+    SELECT DISTINCT core.date_to_yyyyww(mjp.value::date)::text
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't2'
+  );
+  source_period_length integer := (
+    SELECT
+      max(CASE WHEN lower(mjp.key) = 't2' THEN mjp.value::date ELSE NULL END)
+      - max(CASE WHEN lower(mjp.key) = 't1' THEN mjp.value::date ELSE NULL END)
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id
+  );
+  tcrm_text text := (
+    SELECT DISTINCT 'to_date('''||mjp.value||''', ''YYYY-MM-DD'')'
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 'tcrm'
+  );
+  net_job_id integer := (
+    SELECT DISTINCT mjp.value::integer
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 'xsl_job_id'
+  );
+  net_job_id_2 integer := (
+    SELECT DISTINCT mjp.value::integer
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 'xsl_job_id_2'
+  );
+  override_model_variables_check boolean := (
+    SELECT coalesce(lower(trim(max(mjp.value))) = 'true', FALSE)
+    FROM work.module_job_parameters AS mjp 
+    WHERE mjp.mod_job_id = in_mod_job_id 
+    AND mjp.key = 'override_model_variables_check'
+  );
+  model_ids record;  
+  all_var_names text[];
+  included_var_names text[];
+  aggr_block text := '';
+  var_names text := '';
+  aggr_new text;
+  query text;
+  n text;
+
+BEGIN
+
+  -- Find model ids of all the use cases in this module job:
+  SELECT 
+    mp.value 
+  INTO model_ids 
+  FROM work.module_job_parameters AS mp
+  WHERE mp.mod_job_id = in_mod_job_id 
+  AND mp.key LIKE '%model_id';
+
+  all_var_names :=  array_agg(columns) 
+    FROM  work.get_table_columns_with_prefix('work','modelling_data_matrix_2','','mod_job_id,alias_id'); 
+
+
+  IF model_ids IS NULL OR override_model_variables_check THEN
+    included_var_names := all_var_names;
+  ELSE
+    query := 
+    'SELECT array_agg(DISTINCT mm.value) AS var_name
+     FROM work.module_models AS mm
+     WHERE mm.value IN ('''||array_to_string(all_var_names, ''',''')||''')
+     AND mm.key = ''varname''
+     AND mm.model_id IN (
+       SELECT 
+         mp.value::integer AS model_id
+       FROM work.module_job_parameters AS mp
+       WHERE mp.mod_job_id = '||in_mod_job_id||'
+       AND mp.key LIKE ''%model_id''
+       UNION ALL
+       SELECT DISTINCT mm3.value::integer
+       FROM work.module_models AS mm2
+       INNER JOIN work.module_models AS mm3
+       ON mm2.model_id = mm3.model_id
+       WHERE mm2.key = ''model_type''
+       AND mm2.value = ''submodel_list''
+       AND mm3.key = ''model_id'' 
+       AND mm2.model_id IN (
+         SELECT 
+           mp.value::integer AS model_id
+         FROM work.module_job_parameters AS mp
+         WHERE mp.mod_job_id = '||in_mod_job_id||'
+         AND mp.key LIKE ''%model_id''
+       )
+     );';
+    EXECUTE query INTO included_var_names;
+  END IF;
+
+  n := array_upper(included_var_names, 1);
+
+  IF n = '0' THEN
+    RETURN 'WARNING: No variables processed';
+  END IF;
+
+
+  -- Parse some auxiliary texts
+  FOR n IN (
+    SELECT included_var_names[s] FROM generate_series(1,array_upper(included_var_names, 1)) AS s
+  ) LOOP
+    aggr_new := (SELECT CASE
+      WHEN n = 'k_offnet' THEN
+        'sum((1 - f.in_out_network) * b.weight)::double precision / greatest(sum(b.weight), 1e-16) AS k_offnet'
+      WHEN n = 'k_target' THEN
+        'avg(c.source_period_inactivity) AS k_target'
+      WHEN n = 'knn' THEN
+        'round(avg(e.k)) AS knn'
+      WHEN n = 'knn_2' THEN
+        'round(avg(ee.k)) AS knn_2'
+      ELSE NULL
+    END);
+    IF aggr_new IS NOT NULL THEN
+      var_names := var_names||n||', ';
+      aggr_block := aggr_block||aggr_new||', ';
+    END IF;
+  END LOOP;
+
+  -- Fine-tune the auxiliary texts
+  var_names := trim(TRAILING ', ' FROM var_names);
+  aggr_block := trim(TRAILING ', ' FROM aggr_block);
+
+  -- Parse the query
+  query := 
+      'INSERT INTO work.modelling_data_matrix_2
+      (mod_job_id, alias_id, '||var_names||')
+       SELECT 
+         '||in_mod_job_id||' AS mod_job_id,
+          b.alias_a AS alias_id, 
+         '||aggr_block||'
+       FROM work.module_targets AS a 
+       INNER JOIN work.out_network AS b
+       ON b.alias_a = a.alias_id
+       LEFT JOIN (
+         SELECT 
+           sa.alias_id, 
+           1 - (core.yyyyww_to_date(max(sa.period))-'||t1_text||')::double precision / '||source_period_length-7||'::double precision AS source_period_inactivity
+         FROM data.in_split_aggregates AS sa
+         WHERE sa.in_out_network = 1
+         AND sa.voicecount + sa.smscount > 0
+         AND sa.period >= '||t1_week||' 
+         AND sa.period <  '||t2_week||'
+         GROUP BY sa.alias_id
+       ) AS c
+       ON c.alias_id = b.alias_b
+       LEFT JOIN work.out_scores AS e 
+       ON e.alias_id = b.alias_b
+       AND e.job_id = '||net_job_id||'
+       LEFT JOIN work.out_scores AS ee
+       ON ee.alias_id = b.alias_b
+       AND ee.job_id = '||net_job_id_2||'
+       LEFT JOIN work.aliases AS f
+       ON f.alias_id = b.alias_b
+       AND f.job_id = '||net_job_id||'
+       WHERE b.job_id = '||net_job_id||'
+       AND a.mod_job_id = '||in_mod_job_id||'
+       GROUP BY b.alias_a';
+
+  -- Execute and return the query, do some maintenance in between
+  EXECUTE query;
+  PERFORM core.analyze('work.modelling_data_matrix_2', in_mod_job_id);
+  RETURN query;
+
+END;
+
+$$
+    LANGUAGE plpgsql NO SQL;
+
+
+
+new_version
+
+
+CREATE FUNCTION create_modelling_data2(in_mod_job_id integer) RETURNS text
+    AS $$
+
+/* SUMMARY
+ * This function processes modelling variables that are aggregates over
+ * neighbour data. If model_id is available in work.module_job_parameters table, then
+ * only the variables that the model use are processed. Otherwise, all variables
+ * are processed. Results go to work.modelling_data_matrix_2. 
+ *
+ * INPUT
+ * Identifier of module job
+ *
+ * OUTPUT
+ * Query by which this function has inserted data into
+ * work.modelling_data_matrix_2 table
+ *
+ * VERSION
+ * 04.06.2014 HMa - ICIF-181 Stack removal
+ * 13.05.2013 KL  - Added secondary network knn_2 to modelling_variables and data
+ * 06.03.2013 MOJ - ICIF-112
+ * 17.01.2013 HMa - Removed job_type 
+ * 15.01.2013 HMa - ICIF-97
+ * 22.02.2012 TSi - Bug 841 fixed
+ * 17.10.2011 TSi - Bug 742 fixed
+ * 01.10.2010 TSi - Bugs 225 and 175 fixed
+ * 16.09.2010 TSi - Bug 208 fixed
+ * 14.06.2010 TSi - Bug 188 fixed
+ * 19.04.2010 TSi - Bug 177 fixed
+ * 19.04.2010 JMa
+ */
+
+DECLARE
+
+  t1_text text := (
+    SELECT DISTINCT 'to_date('''||mjp.value||''', ''YYYY-MM-DD'')'
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't1'
+  );
+  t2_text text := (
+    SELECT DISTINCT 'to_date('''||mjp.value||''', ''YYYY-MM-DD'')'
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't2'
+  );
+  t1_week text := (
+    SELECT DISTINCT core.date_to_yyyyww(mjp.value::date)::text
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't1'
+  );
+  t2_week text := (
+    SELECT DISTINCT core.date_to_yyyyww(mjp.value::date)::text
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 't2'
+  );
+  source_period_length integer := (
+    SELECT
+      max(CASE WHEN lower(mjp.key) = 't2' THEN mjp.value::date ELSE NULL END)
+      - max(CASE WHEN lower(mjp.key) = 't1' THEN mjp.value::date ELSE NULL END)
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id
+  );
+  tcrm_text text := (
+    SELECT DISTINCT 'to_date('''||mjp.value||''', ''YYYY-MM-DD'')'
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 'tcrm'
+  );
+  net_job_id integer := (
+    SELECT DISTINCT mjp.value::integer
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 'xsl_job_id'
+  );
+  net_job_id_2 integer := (
+    SELECT DISTINCT mjp.value::integer
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND lower(mjp.key) = 'xsl_job_id_2'
+  );
+  override_model_variables_check boolean := (
+    SELECT coalesce(lower(trim(max(mjp.value))) = 'true', FALSE)
+    FROM work.module_job_parameters AS mjp 
+    WHERE mjp.mod_job_id = in_mod_job_id 
+    AND mjp.key = 'override_model_variables_check'
+  );
+  model_ids record;  
+  all_var_names text[];
+  included_var_names text[];
+  aggr_block text := '';
+  var_names text := '';
+  aggr_new text;
+  query text;
+  q text;
+  n text;
+
+BEGIN
+
+  -- Find model ids of all the use cases in this module job:
+  SELECT 
+    mp.value 
+  INTO model_ids 
+  FROM work.module_job_parameters AS mp
+  WHERE mp.mod_job_id = in_mod_job_id 
+  AND mp.key LIKE '%model_id';
+
+  all_var_names :=  array_agg(columns) 
+    FROM  work.get_table_columns_with_prefix('work','modelling_data_matrix_2','','mod_job_id,alias_id'); 
+
+
+  IF model_ids IS NULL OR override_model_variables_check THEN
+    included_var_names := all_var_names;
+  ELSE
+    query := 
+    'SELECT array_agg(DISTINCT mm.value) AS var_name
+     FROM work.module_models AS mm
+     WHERE mm.value IN ('''||array_to_string(all_var_names, ''',''')||''')
+     AND mm.key = ''varname''
+     AND mm.model_id IN (
+       SELECT 
+         mp.value::integer AS model_id
+       FROM work.module_job_parameters AS mp
+       WHERE mp.mod_job_id = '||in_mod_job_id||'
+       AND mp.key LIKE ''%model_id''
+       UNION ALL
+       SELECT DISTINCT mm3.value::integer
+       FROM work.module_models AS mm2
+       INNER JOIN work.module_models AS mm3
+       ON mm2.model_id = mm3.model_id
+       WHERE mm2.key = ''model_type''
+       AND mm2.value = ''submodel_list''
+       AND mm3.key = ''model_id'' 
+       AND mm2.model_id IN (
+         SELECT 
+           mp.value::integer AS model_id
+         FROM work.module_job_parameters AS mp
+         WHERE mp.mod_job_id = '||in_mod_job_id||'
+         AND mp.key LIKE ''%model_id''
+       )
+     );';
+    EXECUTE query INTO included_var_names;
+  END IF;
+
+  n := array_upper(included_var_names, 1);
+
+  IF n = '0' THEN
+    RETURN 'WARNING: No variables processed';
+  END IF;
+
+
+  -- Parse some auxiliary texts
+  FOR n IN (
+    SELECT included_var_names[s] FROM generate_series(1,array_upper(included_var_names, 1)) AS s
+  ) LOOP
+    aggr_new := (SELECT CASE
+      WHEN n = 'k_offnet' THEN
+        'sum((1 - f.in_out_network) * b.weight)::double precision / greatest(sum(b.weight), 1e-16) AS k_offnet'
+      WHEN n = 'k_target' THEN
+        'avg(c.source_period_inactivity) AS k_target'
+      WHEN n = 'knn' THEN
+        'round(avg(e.k)) AS knn'
+      WHEN n = 'knn_2' THEN
+        'round(avg(ee.k)) AS knn_2'
+      ELSE NULL
+    END);
+    IF aggr_new IS NOT NULL THEN
+      var_names := var_names||n||', ';
+      aggr_block := aggr_block||aggr_new||', ';
+    END IF;
+  END LOOP;
+
+  -- Fine-tune the auxiliary texts
+  var_names := trim(TRAILING ', ' FROM var_names);
+  aggr_block := trim(TRAILING ', ' FROM aggr_block);
+
+  -- Parse the query
+  q := 
+      'INSERT INTO work.modelling_data_matrix_2
+      (mod_job_id, alias_id, '||var_names||')
+       SELECT 
+         '||in_mod_job_id||' AS mod_job_id,
+          b.alias_a AS alias_id, 
+         '||aggr_block||'
+       FROM work.module_targets AS a 
+       INNER JOIN work.out_network AS b
+       ON b.alias_a = a.alias_id
+       LEFT JOIN (
+         SELECT 
+           sa.alias_id, 
+           1 - (core.yyyyww_to_date(max(sa.period))-'||t1_text||')::double precision / '||source_period_length-7||'::double precision AS source_period_inactivity
+         FROM data.in_split_aggregates AS sa
+         WHERE sa.in_out_network = 1
+         AND sa.voicecount + sa.smscount > 0
+         AND sa.period >= '||t1_week||' 
+         AND sa.period <  '||t2_week||'
+         GROUP BY sa.alias_id
+       ) AS c
+       ON c.alias_id = b.alias_b
+       LEFT JOIN work.out_scores AS e 
+       ON e.alias_id = b.alias_b
+       AND e.job_id = '||net_job_id||'
+       LEFT JOIN work.out_scores AS ee
+       ON ee.alias_id = b.alias_b
+       AND ee.job_id = '||net_job_id_2||'
+       LEFT JOIN work.aliases AS f
+       ON f.alias_id = b.alias_b
+       AND f.job_id = '||net_job_id||'
+       WHERE b.job_id = '||net_job_id||'
+       AND a.mod_job_id = '||in_mod_job_id||'
+       GROUP BY b.alias_a';
+
+  -- Execute and return the query, do some maintenance in between
+  EXECUTE q;
+  PERFORM core.analyze('work.modelling_data_matrix_2', in_mod_job_id);
+  RETURN q;
+
+END;
+
+$$
+    LANGUAGE plpgsql NO SQL;
+
+
+========================================================
+function work.create_modelling_data1
+
+
+new version 
+
+
+CREATE OR REPLACE FUNCTION create_modelling_data1(in_mod_job_id integer) RETURNS text
+    AS $$
+
+/* SUMMARY
+ * This function processes modelling variables that use data.in_split_aggregates as
+ * source table. If model_id is available in work.module_job_parameters table, then
+ * only the variables that the model use are processed. Otherwise, all variables
+ * are processed. Results go to work.modelling_data_matrix_1.
+ *
+ * INPUT
+ * Identifier of module job
+ *
+ * OUTPUT
+ * Query by which this function has inserted data into
+ * work.modelling_data_matrix_1 table
+ *
+ * VERSION
+ * 04.06.2014 HMa - ICIF-181 Stack removal
+ * 06.03.2013 MOJ - ICIF-112
+ * 25.01.2013 HMa - Read model ids of all the use cases
+ * 15.01.2013 HMa - ICIF-97
+ * 14.06.2010 TSi - Bug 188 fixed
+ * 19.04.2010 JMa
+ */
+
+DECLARE
+
+  t1_date date := (
+    SELECT DISTINCT to_date(mjp.value, 'YYYY-MM-DD')
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND mjp.key = 't1'
+  );
+  t2_date date := (
+    SELECT DISTINCT to_date(mjp.value, 'YYYY-MM-DD')
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND mjp.key = 't2'
+  );
+  override_model_variables_check boolean := (
+    SELECT coalesce(lower(trim(max(mjp.value))) = 'true', FALSE)
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id
+    AND mjp.key = 'override_model_variables_check'
+  );
+
+  all_var_names text[];
+  included_var_names text[];
+  model_ids record;
+  t1_week text := core.date_to_yyyyww(t1_date);
+  t2_week text := core.date_to_yyyyww(t2_date);
+  num_of_weeks double precision := (t2_date - t1_date)::double precision / 7.0;
+  aggr_block text := '';
+  var_names text := '';
+  aggr_new text;
+  query text;
+  q text;
+  n text;
+
+BEGIN
+
+  -- Find model ids of all the use cases in this module job:
+  SELECT
+    mp.value
+  INTO model_ids
+  FROM work.module_job_parameters AS mp
+  WHERE mp.mod_job_id = in_mod_job_id
+  AND mp.key LIKE '%model_id';
+
+  all_var_names :=  array_agg(columns)
+    FROM  work.get_table_columns_with_prefix('work','modelling_data_matrix_1','','mod_job_id,alias_id');
+
+
+  IF model_ids IS NULL OR override_model_variables_check THEN
+    included_var_names := all_var_names;
+  ELSE
+    query :=
+    'SELECT array_agg(DISTINCT mm.value) AS var_name
+     FROM work.module_models AS mm
+     WHERE mm.value IN ('''||array_to_string(all_var_names, ''',''')||''')
+     AND mm.key = ''varname''
+     AND mm.model_id IN (
+       SELECT
+         mp.value::integer AS model_id
+       FROM work.module_job_parameters AS mp
+       WHERE mp.mod_job_id = '||in_mod_job_id||'
+       AND mp.key LIKE ''%model_id''
+       UNION ALL
+       SELECT DISTINCT mm3.value::integer
+       FROM work.module_models AS mm2
+       INNER JOIN work.module_models AS mm3
+       ON mm2.model_id = mm3.model_id
+       WHERE mm2.key = ''model_type''
+       AND mm2.value = ''submodel_list''
+       AND mm3.key = ''model_id''
+       AND mm2.model_id IN (
+         SELECT
+           mp.value::integer AS model_id
+         FROM work.module_job_parameters AS mp
+         WHERE mp.mod_job_id = '||in_mod_job_id||'
+         AND mp.key LIKE ''%model_id''
+       )
+     );';
+    EXECUTE query INTO included_var_names;
+  END IF;
+
+  n := array_upper(included_var_names, 1);
+
+  IF n = '0' THEN
+    RETURN 'WARNING: No variables processed';
+  END IF;
+
+  -- Parse some auxiliary texts
+  FOR n IN (
+    SELECT included_var_names[s] FROM generate_series(1,array_upper(included_var_names, 1)) AS s
+  ) LOOP
+    aggr_new := (SELECT CASE
+      WHEN n IN (
+        'voicecount', 'voicesum', 'voicecountweekday', 'voicesumweekday',
+        'voicecountday', 'voicesumday', 'voicecountevening', 'voicesumevening',
+        'smscount', 'smscountweekday', 'smscountday', 'smscountevening'
+      ) THEN
+        'sum(sa.'||n||')::double precision / '||num_of_weeks||' AS '||n
+      WHEN n = 'alias_count' THEN
+        'sum(sa.mc_'||n||')::double precision / '||num_of_weeks||' AS '||n
+      WHEN n = 'mr_ratio' THEN
+        'CASE
+           WHEN sum(sa.rc_alias_count) > 0
+           THEN avg(sa.mc_alias_count)::double precision / avg(sa.rc_alias_count)
+           ELSE NULL
+         END AS mr_ratio'
+      WHEN n = 'mr_count_ratio' THEN
+        'CASE
+           WHEN sum(sa.rc_voicecount + sa.rc_smscount) > 0
+           THEN avg(sa.voicecount + sa.smscount)::double precision / avg(sa.rc_voicecount + sa.rc_smscount)
+           ELSE NULL
+         END AS mr_count_ratio'
+      WHEN n = 'callsmsratio' THEN
+        'CASE
+           WHEN sum(sa.smscount) > 0
+           THEN avg(sa.voicecount)::double precision / avg(sa.smscount)
+           ELSE NULL
+         END AS callsmsratio'
+      WHEN n = 'week_mean' THEN
+        'CASE
+           WHEN sum(sa.weight_of_week) > 0
+           THEN sum(sa.weight_of_week * sa.period_scaled)::double precision / sum(sa.weight_of_week)
+           ELSE NULL
+         END AS week_mean'
+      WHEN n = 'week_entropy' AND num_of_weeks > 1 THEN
+        'CASE
+           WHEN sum(sa.weight_of_week) > 0
+           THEN (ln(sum(sa.weight_of_week)) - sum(sa.weight_of_week * sa.ln_weight_of_week)::double precision / sum(sa.weight_of_week)) / ln('||num_of_weeks||')
+           ELSE NULL
+         END AS week_entropy'
+      ELSE NULL
+    END);
+    IF aggr_new IS NOT NULL THEN
+      var_names := var_names || n || ', ';
+      aggr_block := aggr_block||aggr_new||', ';
+    END IF;
+  END LOOP;
+
+  -- Fine-tune the auxiliary texts
+  var_names := trim(TRAILING ', ' FROM var_names);
+  aggr_block := trim(TRAILING ', ' FROM aggr_block);
+
+  -- Parse the query (part I)
+  q :=
+    'INSERT INTO work.modelling_data_matrix_1
+     (mod_job_id, alias_id, '||var_names||')
+     SELECT
+       '||in_mod_job_id||' AS mod_job_id,
+        sa.alias_id,
+       '||aggr_block||'
+     FROM (
+       SELECT
+         sa1.*,
+         sa1.voicecount + sa1.smscount AS weight_of_week,
+         ln(CASE WHEN sa1.voicecount + sa1.smscount <= 0 THEN 1.0 ELSE sa1.voicecount + sa1.smscount END) AS ln_weight_of_week,
+         (core.yyyyww_to_date(sa1.period) - to_date('''||to_char(t1_date, 'YYYY-MM-DD')||''', ''YYYY-MM-DD''))::double precision / '||(t2_date - t1_date - 7)|| ' AS period_scaled
+       FROM data.in_split_aggregates AS sa1
+       INNER JOIN work.module_targets AS mt
+       ON sa1.alias_id = mt.alias_id
+       WHERE mt.mod_job_id = '||in_mod_job_id||'
+       AND sa1.period >= '||t1_week||'
+       AND sa1.period < '||t2_week||'
+     ) AS sa
+     GROUP BY sa.alias_id';
+
+
+  -- Execute and return the query, do some maintenance in between
+  EXECUTE q;
+  PERFORM core.analyze('work.modelling_data_matrix_1', in_mod_job_id);
+  RETURN q;
+
+END;
+
+$$
+    LANGUAGE plpgsql NO SQL;
+
+
+
+old_version
+
+CREATE FUNCTION create_modelling_data1(in_mod_job_id integer) RETURNS text
+    AS $$
+
+/* SUMMARY
+ * This function processes modelling variables that use data.in_split_aggregates as
+ * source table. If model_id is available in work.module_job_parameters table, then
+ * only the variables that the model use are processed. Otherwise, all variables
+ * are processed. Results go to work.modelling_data_matrix_1.
+ *
+ * INPUT
+ * Identifier of module job
+ *
+ * OUTPUT
+ * Query by which this function has inserted data into
+ * work.modelling_data_matrix_1 table
+ *
+ * VERSION
+ * 04.06.2014 HMa - ICIF-181 Stack removal
+ * 06.03.2013 MOJ - ICIF-112
+ * 25.01.2013 HMa - Read model ids of all the use cases
+ * 15.01.2013 HMa - ICIF-97
+ * 14.06.2010 TSi - Bug 188 fixed
+ * 19.04.2010 JMa
+ */
+
+DECLARE
+
+  t1_date date := (
+    SELECT DISTINCT to_date(mjp.value, 'YYYY-MM-DD')
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND mjp.key = 't1'
+  );
+  t2_date date := (
+    SELECT DISTINCT to_date(mjp.value, 'YYYY-MM-DD')
+    FROM work.module_job_parameters AS mjp
+    WHERE mjp.mod_job_id = in_mod_job_id AND mjp.key = 't2'
+  );
+  override_model_variables_check boolean := (
+    SELECT coalesce(lower(trim(max(mjp.value))) = 'true', FALSE)
+    FROM work.module_job_parameters AS mjp 
+    WHERE mjp.mod_job_id = in_mod_job_id 
+    AND mjp.key = 'override_model_variables_check'
+  );
+
+  all_var_names text[];
+  included_var_names text[];
+  model_ids record;  
+  t1_week text := core.date_to_yyyyww(t1_date);
+  t2_week text := core.date_to_yyyyww(t2_date);
+  num_of_weeks double precision := (t2_date - t1_date)::double precision / 7.0;
+  aggr_block text := '';
+  var_names text := '';
+  aggr_new text;
+  query text;
+  n text;
+
+BEGIN
+
+  -- Find model ids of all the use cases in this module job:
+  SELECT 
+    mp.value 
+  INTO model_ids 
+  FROM work.module_job_parameters AS mp
+  WHERE mp.mod_job_id = in_mod_job_id 
+  AND mp.key LIKE '%model_id';
+
+  all_var_names :=  array_agg(columns)
+    FROM  work.get_table_columns_with_prefix('work','modelling_data_matrix_1','','mod_job_id,alias_id'); 
+
+
+  IF model_ids IS NULL OR override_model_variables_check THEN
+    included_var_names := all_var_names;
+  ELSE
+    query := 
+    'SELECT array_agg(DISTINCT mm.value) AS var_name
+     FROM work.module_models AS mm
+     WHERE mm.value IN ('''||array_to_string(all_var_names, ''',''')||''')
+     AND mm.key = ''varname''
+     AND mm.model_id IN (
+       SELECT 
+         mp.value::integer AS model_id
+       FROM work.module_job_parameters AS mp
+       WHERE mp.mod_job_id = '||in_mod_job_id||'
+       AND mp.key LIKE ''%model_id''
+       UNION ALL
+       SELECT DISTINCT mm3.value::integer
+       FROM work.module_models AS mm2
+       INNER JOIN work.module_models AS mm3
+       ON mm2.model_id = mm3.model_id
+       WHERE mm2.key = ''model_type''
+       AND mm2.value = ''submodel_list''
+       AND mm3.key = ''model_id'' 
+       AND mm2.model_id IN (
+         SELECT 
+           mp.value::integer AS model_id
+         FROM work.module_job_parameters AS mp
+         WHERE mp.mod_job_id = '||in_mod_job_id||'
+         AND mp.key LIKE ''%model_id''
+       )
+     );';
+    EXECUTE query INTO included_var_names;
+  END IF;
+
+  n := array_upper(included_var_names, 1);
+
+  IF n = '0' THEN
+    RETURN 'WARNING: No variables processed';
+  END IF;
+
+  -- Parse some auxiliary texts
+  FOR n IN (
+    SELECT included_var_names[s] FROM generate_series(1,array_upper(included_var_names, 1)) AS s
+  ) LOOP
+    aggr_new := (SELECT CASE
+      WHEN n IN (
+        'voicecount', 'voicesum', 'voicecountweekday', 'voicesumweekday',
+        'voicecountday', 'voicesumday', 'voicecountevening', 'voicesumevening',
+        'smscount', 'smscountweekday', 'smscountday', 'smscountevening'
+      ) THEN 
+        'sum(sa.'||n||')::double precision / '||num_of_weeks||' AS '||n
+      WHEN n = 'alias_count' THEN
+        'sum(sa.mc_'||n||')::double precision / '||num_of_weeks||' AS '||n
+      WHEN n = 'mr_ratio' THEN 
+        'CASE
+           WHEN sum(sa.rc_alias_count) > 0
+           THEN avg(sa.mc_alias_count)::double precision / avg(sa.rc_alias_count)
+           ELSE NULL
+         END AS mr_ratio'
+      WHEN n = 'mr_count_ratio' THEN
+        'CASE
+           WHEN sum(sa.rc_voicecount + sa.rc_smscount) > 0
+           THEN avg(sa.voicecount + sa.smscount)::double precision / avg(sa.rc_voicecount + sa.rc_smscount)
+           ELSE NULL
+         END AS mr_count_ratio'
+      WHEN n = 'callsmsratio' THEN
+        'CASE
+           WHEN sum(sa.smscount) > 0
+           THEN avg(sa.voicecount)::double precision / avg(sa.smscount)
+           ELSE NULL
+         END AS callsmsratio'
+      WHEN n = 'week_mean' THEN
+        'CASE
+           WHEN sum(sa.weight_of_week) > 0
+           THEN sum(sa.weight_of_week * sa.period_scaled)::double precision / sum(sa.weight_of_week)
+           ELSE NULL
+         END AS week_mean'
+      WHEN n = 'week_entropy' AND num_of_weeks > 1 THEN
+        'CASE
+           WHEN sum(sa.weight_of_week) > 0
+           THEN (ln(sum(sa.weight_of_week)) - sum(sa.weight_of_week * sa.ln_weight_of_week)::double precision / sum(sa.weight_of_week)) / ln('||num_of_weeks||')
+           ELSE NULL
+         END AS week_entropy'
+      ELSE NULL
+    END);
+    IF aggr_new IS NOT NULL THEN
+      var_names := var_names || n || ', ';
+      aggr_block := aggr_block||aggr_new||', ';
+    END IF;
+  END LOOP;
+
+  -- Fine-tune the auxiliary texts
+  var_names := trim(TRAILING ', ' FROM var_names);
+  aggr_block := trim(TRAILING ', ' FROM aggr_block);
+
+  -- Parse the query (part I)
+  query :=
+    'INSERT INTO work.modelling_data_matrix_1
+     (mod_job_id, alias_id, '||var_names||')
+     SELECT 
+       '||in_mod_job_id||' AS mod_job_id,
+        sa.alias_id, 
+       '||aggr_block||'
+     FROM (
+       SELECT 
+         sa1.*,       
+         sa1.voicecount + sa1.smscount AS weight_of_week,
+         ln(CASE WHEN sa1.voicecount + sa1.smscount <= 0 THEN 1.0 ELSE sa1.voicecount + sa1.smscount END) AS ln_weight_of_week,
+         (core.yyyyww_to_date(sa1.period) - to_date('''||to_char(t1_date, 'YYYY-MM-DD')||''', ''YYYY-MM-DD''))::double precision / '||(t2_date - t1_date - 7)|| ' AS period_scaled
+       FROM data.in_split_aggregates AS sa1
+       INNER JOIN work.module_targets AS mt
+       ON sa1.alias_id = mt.alias_id
+       WHERE mt.mod_job_id = '||in_mod_job_id||'
+       AND sa1.period >= '||t1_week||' 
+       AND sa1.period < '||t2_week||'
+     ) AS sa
+     GROUP BY sa.alias_id';
+
+
+  -- Execute and return the query, do some maintenance in between
+  EXECUTE query;
+  PERFORM core.analyze('work.modelling_data_matrix_1', in_mod_job_id);
+  RETURN query;
+
+END;
+
+$$
+    LANGUAGE plpgsql NO SQL;
+
+
+===================================================
+function work.combine_modelling_data
+
+new version 
+
+
+CREATE OR REPLACE FUNCTION combine_modelling_data(in_mod_job_id integer, in_target_table text, in_table_full_names text, in_join_columns text) RETURNS void
+    AS $_$
+/*
+ * A function to combine modelling data from different submatrices into
+ * one matrix. Currently, it is assumed that the first table contains the mod job id column
+ * for applying the where clause (e.g. WHERE table1.mod_job_id = in_mod_job_id).
+ *
+ * Parameters:
+ * in_mod_job_id: module job id
+ * in_target_table: table to insert combined data into, e.g. 'work.modelling_data_matrix'
+ * in_table_full_names: tables to combine separated with comma, e.g. 'work.modelling_data_matrix_base_1a,work.modelling_data_matrix_base_1b'
+ * in_join_columns: columns to use for joining separated with comma, e.g. 'mod_job_id,alias_id'
+ *
+ * VERSION
+ * 24.07.2014 JVi: Allow arbitrary tables
+ * 05.06.2014 HMa
+ */
+
+
+DECLARE
+
+  query text;
+  columns_string1 text;
+  columns_string2 text;
+  from_clause text;
+  target_schema text := substring(in_target_table from E'^(.*)\\.');
+  target_table text  := substring(in_target_table from E'\\.(.*)$' );
+  schema_names text[] := string_to_array(regexp_replace(in_table_full_names, E'(\\.[^,]*|\\s)', '', 'g'), ',');
+  table_names text[]  := string_to_array(regexp_replace(in_table_full_names, E'([^.,]*?[.]|\\s)', '', 'g'), ',');
+
+  i integer;
+  n_tables integer := array_upper(string_to_array(in_table_full_names, ','), 1);
+  target_table_column_array text[];
+
+BEGIN
+
+  --Arrange target table columns in alphabetical order
+  columns_string1 :=
+    array_to_string(array_agg(column_name::text),',')
+    FROM information_schema.columns
+    WHERE table_schema = target_schema
+    AND table_name = target_table;
+
+  columns_string1 := regexp_replace(columns_string1, E'\\s', '', 'g'); --Remove whitespace
+  columns_string1 := regexp_replace(columns_string1, ',$', ''); --Remove trailing comma
+  target_table_column_array := string_to_array(columns_string1, ',');
+
+  columns_string2 := in_join_columns || ',';
+  from_clause := '';
+
+  FOR i IN 1..n_tables LOOP
+    columns_string2 := columns_string2 || array_to_string(array_agg(prefix||columns),',') || ',' from
+      (SELECT * FROM work.get_table_columns_with_prefix(schema_names[i], table_names[i], 'm_' || i, in_join_columns)) a;
+    from_clause := from_clause || '
+    LEFT JOIN ' || schema_names[i] || '.' || table_names[i] || ' m_' || i || ' USING (' || in_join_columns || ')';
+  END LOOP;
+
+  columns_string2 := regexp_replace(columns_string2, E'\\s', '', 'g'); --Remove whitespace
+  columns_string2 := regexp_replace(columns_string2, ',$', '');        --Remove trailing comma
+
+  -- Remove from columns_string1 columns that are not present in source tables
+  -- (Note: could probably be done more elegantly - this is a bit silly)
+  FOR i IN 1..array_upper(target_table_column_array, 1) LOOP
+    IF NOT string_to_array(regexp_replace(columns_string2, E'[^,]*\\.', '', 'g'), ',') @> ARRAY[target_table_column_array[i]] THEN
+      columns_string1 := regexp_replace(columns_string1, '^' || target_table_column_array[i] || '$', '');
+      columns_string1 := regexp_replace(columns_string1, '^' || target_table_column_array[i] || ',', '');
+      columns_string1 := regexp_replace(columns_string1, '(,' || target_table_column_array[i] || ')(?=,)', '');
+      columns_string1 := regexp_replace(columns_string1, ',' || target_table_column_array[i] || '$', '');
+    END IF;
+  END LOOP;
+
+  --Arrange source table columns in alphabetical order
+  columns_string2 = array_to_string(array_agg(b), E',\n    ')
+    FROM (
+      SELECT b FROM (
+        SELECT unnest(string_to_array(columns_string2, ','))
+      ) a(b)
+      ORDER BY regexp_replace(b, E'[^,]*?\\.', '' ,'g') -- Order by table name without prefix
+    ) c;
+
+  from_clause := regexp_replace(from_clause, 'LEFT JOIN', 'FROM'); -- Replacing the first left join with from
+  from_clause := regexp_replace(from_clause, E'USING \\(.*?\\)', '');    -- Removing unnecessary using clause from first row
+
+
+  columns_string1 := regexp_replace(columns_string2, 'm_[0-9]+\.', '', 'g');
+
+  RAISE NOTICE '%', columns_string1;
+
+  query := 'INSERT INTO ' || in_target_table || ' ('
+    ||columns_string1||
+  ')
+  SELECT '
+    ||columns_string2||'
+ '  || from_clause || '
+  WHERE m_1.mod_job_id = ' || in_mod_job_id;
+
+  RAISE NOTICE '%', query;
+
+  EXECUTE query;
+
+
+
+  PERFORM  core.analyze(in_target_table,in_mod_job_id);
+
+END;
+
+$_$
+    LANGUAGE plpgsql NO SQL;
+
+
+
+
+old version 
+
+
+CREATE FUNCTION combine_modelling_data(in_mod_job_id integer, in_target_table text, in_table_full_names text, in_join_columns text) RETURNS void
+    AS $_$
+/*
+ * A function to combine modelling data from different submatrices into
+ * one matrix. Currently, it is assumed that the first table contains the mod job id column
+ * for applying the where clause (e.g. WHERE table1.mod_job_id = in_mod_job_id).
+ * 
+ * Parameters: 
+ * in_mod_job_id: module job id
+ * in_target_table: table to insert combined data into, e.g. 'work.modelling_data_matrix'
+ * in_table_full_names: tables to combine separated with comma, e.g. 'work.modelling_data_matrix_base_1a,work.modelling_data_matrix_base_1b'
+ * in_join_columns: columns to use for joining separated with comma, e.g. 'mod_job_id,alias_id'
+ * 
+ * VERSION 
+ * 24.07.2014 JVi: Allow arbitrary tables
+ * 05.06.2014 HMa 
+ */
+
+
+DECLARE
+
+  query text;
+  columns_string1 text;
+  columns_string2 text;
+  from_clause text;
+  target_schema text := substring(in_target_table from E'^(.*)\\.');
+  target_table text  := substring(in_target_table from E'\\.(.*)$' );
+  schema_names text[] := string_to_array(regexp_replace(in_table_full_names, E'(\\.[^,]*|\\s)', '', 'g'), ',');
+  table_names text[]  := string_to_array(regexp_replace(in_table_full_names, E'([^.,]*?[.]|\\s)', '', 'g'), ',');
+  
+  i integer;
+  n_tables integer := array_upper(string_to_array(in_table_full_names, ','), 1);
+  target_table_column_array text[];
+
+BEGIN
+
+  --Arrange target table columns in alphabetical order
+  columns_string1 :=
+    array_to_string(core.array_sort(array_agg(column_name::text)),',')
+    FROM information_schema.columns 
+    WHERE table_schema = target_schema 
+    AND table_name = target_table;
+
+  columns_string1 := regexp_replace(columns_string1, E'\\s', '', 'g'); --Remove whitespace
+  columns_string1 := regexp_replace(columns_string1, ',$', ''); --Remove trailing comma
+  target_table_column_array := string_to_array(columns_string1, ',');
+  
+  columns_string2 := in_join_columns || ',';
+  from_clause := '';
+  
+  FOR i IN 1..n_tables LOOP
+    columns_string2 := columns_string2 || array_to_string(array_agg(prefix||columns),',') || ',' from
+      (SELECT * FROM work.get_table_columns_with_prefix(schema_names[i], table_names[i], 'm_' || i, in_join_columns)) a;
+    from_clause := from_clause || '
+    LEFT JOIN ' || schema_names[i] || '.' || table_names[i] || ' m_' || i || ' USING (' || in_join_columns || ')'; 
+  END LOOP;
+
+  columns_string2 := regexp_replace(columns_string2, E'\\s', '', 'g'); --Remove whitespace
+  columns_string2 := regexp_replace(columns_string2, ',$', '');        --Remove trailing comma
+  
+  -- Remove from columns_string1 columns that are not present in source tables
+  -- (Note: could probably be done more elegantly - this is a bit silly)
+  FOR i IN 1..array_upper(target_table_column_array, 1) LOOP
+    IF NOT string_to_array(regexp_replace(columns_string2, E'[^,]*\\.', '', 'g'), ',') @> ARRAY[target_table_column_array[i]] THEN
+      columns_string1 := regexp_replace(columns_string1, '^' || target_table_column_array[i] || '$', '');
+      columns_string1 := regexp_replace(columns_string1, '^' || target_table_column_array[i] || ',', '');
+      columns_string1 := regexp_replace(columns_string1, '(,' || target_table_column_array[i] || ')(?=,)', '');
+      columns_string1 := regexp_replace(columns_string1, ',' || target_table_column_array[i] || '$', '');
+    END IF;
+  END LOOP;
+
+  --Arrange source table columns in alphabetical order
+  columns_string2 = array_to_string(array_agg(b), E',\n    ')
+    FROM (
+      SELECT b FROM (
+        SELECT unnest(string_to_array(columns_string2, ','))
+      ) a(b) 
+      ORDER BY regexp_replace(b, E'[^,]*?\\.', '' ,'g') -- Order by table name without prefix
+    ) c;
+
+  from_clause := regexp_replace(from_clause, 'LEFT JOIN', 'FROM'); -- Replacing the first left join with from
+  from_clause := regexp_replace(from_clause, E'USING \\(.*?\\)', '');    -- Removing unnecessary using clause from first row
+  
+  query := 'INSERT INTO ' || in_target_table || ' ('
+    ||columns_string1||  
+  ')
+  SELECT '
+    ||columns_string2||'
+ '  || from_clause || '
+  WHERE m_1.mod_job_id = ' || in_mod_job_id;
+
+  EXECUTE query;
+
+  PERFORM  core.analyze(in_target_table,in_mod_job_id);
+
+END;
+
+$_$
+    LANGUAGE plpgsql NO SQL;
+=====================================================================================================
+
+
