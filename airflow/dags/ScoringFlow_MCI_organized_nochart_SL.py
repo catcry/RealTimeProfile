@@ -75,6 +75,7 @@ with DAG(
     Init_parameters_for_scoring = PythonOperator(
         task_id='Init_parameters_for_scoring',
         python_callable=Init_parameters_for_scoring_function,
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 
@@ -193,6 +194,7 @@ with DAG(
         sql="update core_runbean_attributes set attributes = 'Applying model on historical data' where runbean_id = '{{ run_id }}' and attributes_key = 'checkpoint';",
         postgres_conn_id='metaDB',
         trigger_rule='none_failed_min_one_success',
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 
@@ -918,7 +920,7 @@ with DAG(
 
 
 
-                we_should_create_orbiret_task_check_the_xml_file = EmptyOperator(task_id="we_should_create_orbiret_task_check_the_xml_file", dag=dag)
+                we_should_create_orbiret_task_check_the_xml_file = EmptyOperator(task_id="we_should_create_orbiret_task_check_the_xml_file",trigger_rule=TriggerRule.ALL_DONE, dag=dag)
 
 
                 send_email4 = EmailOperator( 
@@ -929,7 +931,7 @@ with DAG(
                 )
 
 
-                join = EmptyOperator(task_id="join", dag=dag)
+                join = EmptyOperator(task_id="join", trigger_rule=TriggerRule.ALL_DONE, dag=dag)
 
 
                 create_predictors_2 = PostgresOperator(

@@ -77,6 +77,7 @@ with DAG(
         task_id='set_start_and_end_date',
         sql="select max(prev_agg_day)+1 as start_date, max(prev_agg_day) + 8 as end_date from tmp.validate_aggregation_results;",
         postgres_conn_id='greenplum_conn',
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 
@@ -97,6 +98,7 @@ with DAG(
                 );
             """,
         postgres_conn_id='greenplum_conn',
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 
@@ -122,6 +124,7 @@ with DAG(
         task_id='data_call_types_weekly',
         sql="select data.call_types_weekly();",
         postgres_conn_id='greenplum_conn',
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 
@@ -148,6 +151,7 @@ with DAG(
         task_id='in_split_weekly',
         sql="select data.in_split_weekly();",
         postgres_conn_id='greenplum_conn',
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 

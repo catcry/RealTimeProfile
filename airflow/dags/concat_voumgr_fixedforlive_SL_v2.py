@@ -33,6 +33,7 @@ with DAG(
     move_delayed_files = BashOperator(
         task_id="move_delayed_files",
         bash_command='bash {{ var.value.rtdmed1path }}/movelatefilesback.sh {{ var.value.rtdmed1path }} $(date +%Y%m%d) $(date -d yesterday +%Y%m%d)',
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 

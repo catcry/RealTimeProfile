@@ -7,7 +7,7 @@ import logging
 from airflow.operators.python import PythonOperator, BranchPythonOperator
 from airflow.models import Variable
 from airflow.utils.task_group import TaskGroup
-from airflow.utils.trigger_rule import TriggerRule
+
 
 
 default_args = {
@@ -19,7 +19,7 @@ default_args = {
 
 
 with DAG(
-    dag_id = 'DataLoadingMain_MCI_SL',
+    dag_id = 'DataLoading_test_mhds_v1',
     default_args=default_args,
     description='test dag',
     schedule_interval='0 0 * * *',
@@ -27,7 +27,7 @@ with DAG(
 ) as dag:
     send_email0 = EmailOperator( 
         task_id='send_email0', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node', 
         html_content='Run dataloader started with workflow_run_id of {{ var.value.workflow_run_id }}' 
     )
@@ -35,8 +35,7 @@ with DAG(
     check_operator_own_name = PostgresOperator( 
         task_id='check_operator_own_name', 
         sql="SELECT * FROM data.check_operator_own_name('{{ var.value.operator_own_name }}');",
-        postgres_conn_id='greenplum_conn', 
-        trigger_rule=TriggerRule.ALL_DONE,
+        postgres_conn_id='gp_test_mhds', 
         dag=dag 
     )
 
@@ -50,99 +49,160 @@ with DAG(
 
     send_email1 = EmailOperator( 
         task_id='send_email1', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node', 
         html_content='Run Dataloader node completed for {{ var.value.workflow_run_id }}' 
     )
 
 
+    
     with TaskGroup("DataLoadingCommonProlog_MCI", tooltip="DataLoadingCommonProlog_MCI") as DataLoadingCommonProlog_MCI:
         
         network_list = PostgresOperator(
             task_id='network_list',
             sql="SELECT data.network_list('{{ var.value.operator_own_name }}')",
-            postgres_conn_id='greenplum_conn',
-            trigger_rule=TriggerRule.ALL_DONE,
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+
+        network_list.doc_md = """
+            **network list** does the following:
+            - This function is used to ensure the operator’s own network name is present in the aliases.network_list table
+            """
 
         tmp_crm_staging = PostgresOperator(
             task_id='tmp_crm_staging',
             sql="SELECT data.tmp_crm_staging_new('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+
+        tmp_crm_staging.doc_md= """
+            1. Collects failed row stats from a staging table error log (tmp.crm_new)
+            2. Loads valid records into a cleaned staging table (tmp.crm_staging)
+            3. Tracks which files have already been processed in data.processed_files
+            4. Summarizes processed data into data.processed_data
+            5. Performs frequent ANALYZE commands to update database statistics
+            """
 
         aliases_string_id_crm = PostgresOperator(
             task_id='aliases_string_id_crm',
             sql="SELECT data.aliases_string_id_crm()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+
+        aliases_string_id_crm.doc_md = """
+            1. Extract all distinct, non-null string_ids from the cleaned CRM data (tmp.crm_staging)
+            2. Insert only the new ones into the reference table aliases.string_id
+            3. Record the current date for when each string_id was inserted
+            4. Run ANALYZE to update database statistics for optimal query planning
+            """
 
         aliases_network_crm = PostgresOperator(
             task_id='aliases_network_crm',
             sql="SELECT data.aliases_network_crm()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+
+        aliases_network_crm.doc_md = """
+            1. Records start dates when a subscriber joined the operator’s network (i.e., activated a line)
+            2. Records end dates when a subscriber left or got disconnected
+            3. Ensures no duplicate records using LEFT JOIN ... IS NULL
+            """
 
         tmp_cdr_staging = PostgresOperator(
             task_id='tmp_cdr_staging',
             sql="SELECT data.tmp_cdr_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
+        tmp_cdr_staging.doc_md = """
+        1. Logs failed rows from CDR input into a failed_rows_stats table
+        2. Transforms and inserts clean CDR data into a staging table: tmp.cdr_staging
+        3. Tracks metadata for processed files in data.processed_files
+        4. Summarizes data for reporting in data.processed_data
+        """
 
         network_list_cdr = PostgresOperator(
             task_id='network_list_cdr',
             sql="SELECT data.network_list_cdr()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+
+        network_list_cdr.doc_md = """
+        It ensures that every network appearing in the CDR data — whether as a_network or b_network — is:
+            1. Collected, cleaned, and normalized (e.g., unknowns → 'others')
+            2. Inserted into the reference table aliases.network_list, if not already there
+            3. Statistically analyzed with ANALYZE for query performance
+            """
 
         aliases_string_id_cdr = PostgresOperator(
             task_id='aliases_string_id_cdr',
             sql="SELECT data.aliases_string_id_cdr()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+
+        aliases_string_id_cdr.doc_md = """
+            This function ensures that every unique phone number(MSISDN) or subscriber identifier appearing in either:
+            1. the caller field (a_number) or
+            2. the receiver field (b_number)
+            is stored once in a centralized aliases.string_id table, along with the date it was first inserted.
+            """
         
 
         tmp_topup_staging = PostgresOperator(
             task_id='tmp_topup_staging',
             sql="SELECT data.tmp_topup_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
+        tmp_topup_staging.doc_md = """
+            1. Tracks and logs failed input rows from top-up and balance transfer files
+            2. Transforms and cleans valid records from two raw input tables:
+                tmp.topup
+                tmp.balance_transfer
+            3. Merges both into a unified staging table: tmp.topup_staging
+            4. Tracks processed files, statistical summaries, and key metrics
+        """
 
         aliases_string_id_topup = PostgresOperator(
             task_id='aliases_string_id_topup',
             sql="SELECT data.aliases_string_id_topup()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
+        aliases_string_id_topup.doc_md = """
+        ensure that every unique subscriber ID involved in a top-up (either as sender or receiver) is:
+            1. Collected and deduplicated
+            2. Registered in a reference table aliases.string_id
+            3. Tracked with a date_inserted timestamp
+        """
+
 
         aliases_network_topup = PostgresOperator(
             task_id='aliases_network_topup',
             sql="SELECT data.aliases_network_topup()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         tmp_product_takeup_staging = PostgresOperator(
             task_id='tmp_product_takeup_staging',
             sql="SELECT data.tmp_product_takeup_staging_new('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         aliases_string_id_product_takeup = PostgresOperator(
             task_id='aliases_string_id_product_takeup',
             sql="SELECT data.aliases_string_id_product_takeup()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
         
@@ -150,7 +210,7 @@ with DAG(
         tmp_portout_ported_staging = PostgresOperator(
             task_id='tmp_portout_ported_staging',
             sql="SELECT data.tmp_portout_ported_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
         
@@ -158,7 +218,7 @@ with DAG(
         tmp_portout_ongoing_staging = PostgresOperator(
             task_id='tmp_portout_ongoing_staging',
             sql="SELECT data.tmp_portout_ongoing_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -166,7 +226,7 @@ with DAG(
         tmp_portout_notported_staging = PostgresOperator(
             task_id='tmp_portout_notported_staging',
             sql="SELECT data.tmp_portout_notported_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -174,7 +234,7 @@ with DAG(
         tmp_portin_ported_staging = PostgresOperator(
             task_id='tmp_portin_ported_staging',
             sql="SELECT data.tmp_portin_ported_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -182,7 +242,7 @@ with DAG(
         tmp_portin_ongoing_staging = PostgresOperator(
             task_id='tmp_portin_ongoing_staging',
             sql="SELECT data.tmp_portin_ongoing_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -190,7 +250,7 @@ with DAG(
         tmp_portin_notported_staging = PostgresOperator(
             task_id='tmp_portin_notported_staging',
             sql="SELECT data.tmp_portin_notported_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -198,14 +258,14 @@ with DAG(
         tmp_portability_staging = PostgresOperator(
             task_id='tmp_portability_staging',
             sql="SELECT data.tmp_portability_staging()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         aliases_string_id_portability = PostgresOperator(
             task_id='aliases_string_id_portability',
             sql="SELECT data.aliases_string_id_portability()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -213,35 +273,35 @@ with DAG(
         aliases_network_portability = PostgresOperator(
             task_id='aliases_network_portability',
             sql="SELECT data.aliases_network_portability()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         tmp_customer_care_staging = PostgresOperator(
             task_id='tmp_customer_care_staging',
             sql="SELECT data.tmp_customer_care_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         aliases_string_id_customer_care = PostgresOperator(
             task_id='aliases_string_id_customer_care',
             sql="SELECT data.aliases_string_id_customer_care()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         tmp_pre_aggregates_staging = PostgresOperator(
             task_id='tmp_pre_aggregates_staging',
             sql="SELECT data.tmp_pre_aggregates_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         aliases_string_id_pre_aggregates = PostgresOperator(
             task_id='aliases_string_id_pre_aggregates',
             sql="SELECT data.aliases_string_id_pre_aggregates()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -251,7 +311,7 @@ with DAG(
 
     send_email2 = EmailOperator( 
         task_id='send_email2', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node', 
         html_content='commonprologfinished for {{ var.value.workflow_run_id }}' 
     )
@@ -261,22 +321,21 @@ with DAG(
         create_crm_partitions = PostgresOperator(
             task_id='create_crm_partitions',
             sql="select core.create_crm_partitions()",
-            postgres_conn_id='greenplum_conn',
-            trigger_rule=TriggerRule.ALL_DONE,
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_crm = PostgresOperator(
             task_id='data_crm',
             sql="select data.crm_new()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_in_crm = PostgresOperator(
             task_id='data_in_crm',
             sql="select data.in_crm()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -285,7 +344,7 @@ with DAG(
 
     send_email3 = EmailOperator( 
         task_id='send_email3', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node', 
         html_content='stage crm finished for {{ var.value.workflow_run_id }}' 
     )
@@ -295,15 +354,14 @@ with DAG(
         tmp_blacklist_staging = PostgresOperator(
             task_id='tmp_blacklist_staging',
             sql="select data.tmp_blacklist_staging('{{ var.value.workflow_run_id }}')",
-            postgres_conn_id='greenplum_conn',
-            trigger_rule=TriggerRule.ALL_DONE,
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_blacklist = PostgresOperator(
             task_id='data_blacklist',
             sql="select data.blacklist()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -315,21 +373,21 @@ with DAG(
         create_cdr_partitions = PostgresOperator(
             task_id='create_cdr_partitions',
             sql="select core.create_cdr_partitions()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_cdr = PostgresOperator(
             task_id='data_cdr',
             sql="select data.cdr()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         aliases_update = PostgresOperator(
             task_id='aliases_update',
             sql="select aliases.update()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -338,7 +396,7 @@ with DAG(
 
     send_email4 = EmailOperator( 
         task_id='send_email4', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node', 
         html_content='stage cdr finished for {{ var.value.workflow_run_id }}' 
     )
@@ -349,22 +407,21 @@ with DAG(
         create_topup_partitions = PostgresOperator(
             task_id='create_topup_partitions',
             sql="select core.create_topup_partitions()",
-            postgres_conn_id='greenplum_conn',
-            trigger_rule=TriggerRule.ALL_DONE,
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         aliases_network_topup = PostgresOperator(
             task_id='aliases_network_topup',
             sql="select data.aliases_network_topup()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_topup = PostgresOperator(
             task_id='data_topup',
             sql="select data.topup()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -378,7 +435,7 @@ with DAG(
         create_product_takeup_partitions = PostgresOperator(
             task_id='create_product_takeup_partitions',
             sql="select core.create_product_takeup_partitions()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -386,7 +443,7 @@ with DAG(
         data_product_takeup = PostgresOperator(
             task_id='data_product_takeup',
             sql="select data.product_takeup()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
     
@@ -400,14 +457,14 @@ with DAG(
         create_portability_partitions = PostgresOperator(
             task_id='create_portability_partitions',
             sql="select core.create_portability_partitions()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_portability = PostgresOperator(
             task_id='data_portability',
             sql="select data.portability()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -415,7 +472,7 @@ with DAG(
         port_out_requests = PostgresOperator(
             task_id='port_out_requests',
             sql="select data.port_out_requests()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -430,7 +487,7 @@ with DAG(
         create_customer_care_partitions = PostgresOperator(
             task_id='create_customer_care_partitions',
             sql="select core.create_customer_care_partitions()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -438,7 +495,7 @@ with DAG(
         data_customer_care = PostgresOperator(
             task_id='data_customer_care',
             sql="select data.customer_care()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -451,14 +508,14 @@ with DAG(
         create_pre_aggregates_partitions = PostgresOperator(
             task_id='create_pre_aggregates_partitions',
             sql="select core.create_pre_aggregates_partitions()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
         data_pre_aggregates = PostgresOperator(
             task_id='data_pre_aggregates',
             sql="select data.pre_aggregates()",
-            postgres_conn_id='greenplum_conn',
+            postgres_conn_id='gp_test_mhds',
             dag=dag
         )
 
@@ -467,7 +524,7 @@ with DAG(
 
     send_email5 = EmailOperator( 
         task_id='send_email5', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node', 
         html_content='all stagng finished for {{ var.value.workflow_run_id }}' 
     )
@@ -476,8 +533,7 @@ with DAG(
     aliases_update = PostgresOperator(
         task_id='aliases_update',
         sql="select aliases.update()",
-        postgres_conn_id='greenplum_conn',
-        trigger_rule=TriggerRule.ALL_DONE,
+        postgres_conn_id='gp_test_mhds',
         dag=dag
     )
 
@@ -529,7 +585,7 @@ with DAG(
             and a.data_date = b.data_date
             where b.data_source is null;
             """,
-        postgres_conn_id='greenplum_conn',
+        postgres_conn_id='gp_test_mhds',
         dag=dag
     )
 
@@ -537,7 +593,7 @@ with DAG(
     create_errors_partitions = PostgresOperator(
         task_id='create_errors_partitions',
         sql="select core.create_validation_errors_partitions()",
-        postgres_conn_id='greenplum_conn',
+        postgres_conn_id='gp_test_mhds',
         dag=dag
     )
 
@@ -571,7 +627,7 @@ with DAG(
             from tmp.validation_errors
             );
             """,
-        postgres_conn_id='greenplum_conn',
+        postgres_conn_id='gp_test_mhds',
         dag=dag
     )
 
@@ -597,14 +653,14 @@ with DAG(
     cleanup_old_partitions = PostgresOperator(
         task_id='cleanup_old_partitions',
         sql="select core.cleanup_partitions()",
-        postgres_conn_id='greenplum_conn',
+        postgres_conn_id='gp_test_mhds',
         dag=dag
     )
 
 
     send_email6 = EmailOperator( 
         task_id='send_email6', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node',
         html_content='Dataloading compilited for master_copy in FAA MCI Installation for {{ var.value.workflow_run_id }}' 
     )
@@ -612,7 +668,7 @@ with DAG(
 
     send_email7 = EmailOperator( 
         task_id='send_email7', 
-        to='tahamiri02@gmail.com', 
+        to='m.abedi@bonyansystem.com', 
         subject='Fastermind MCI Dataloader node',
         html_content='Dataloading compilited for master_copy in FAA MCI Installation for {{ var.value.workflow_run_id }}' 
     )

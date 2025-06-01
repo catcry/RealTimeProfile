@@ -38,6 +38,7 @@ with DAG(
         task_id='list_number_of_crm_files',
         bash_command="ls /backup/TO_FAA/input/ | grep RTD_CUST | wc -l",
         do_xcom_push = True,
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 

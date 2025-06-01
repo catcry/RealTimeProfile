@@ -34,6 +34,7 @@ with DAG(
     task_id='clean_up_master_copy',
     bash_command='bash /backup/TO_FAA/cleanupmastercopy.sh ',
     do_xcom_push = True,
+    trigger_rule=TriggerRule.ALL_DONE,
     dag=dag
     )
 

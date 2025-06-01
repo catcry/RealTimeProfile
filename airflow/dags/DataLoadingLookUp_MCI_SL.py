@@ -38,6 +38,7 @@ with DAG(
         task_id='run_data_loader',
         bash_command='ssh gpadmin@192.168.5.231 "nohup bash /home/gpadmin/dataloading/database_loader_lookup.sh {{ var.value.workflow_run_id }}"',
         do_xcom_push = True,
+        trigger_rule=TriggerRule.ALL_DONE,
         dag=dag
     )
 
