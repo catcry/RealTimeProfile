@@ -19,7 +19,6 @@ import java.util.concurrent.*;
 public class CbProfileUtilsApplication implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(CbProfileUtilsApplication.class);
-    private static final int BATCH_SIZE = 5000;
     private static final int THREAD_COUNT = Runtime.getRuntime().availableProcessors() * 2;
 
     private final ProfileDetailService profileDetailService;
@@ -31,9 +30,14 @@ public class CbProfileUtilsApplication implements CommandLineRunner {
     private String headerFilePath;
     @Value("${bi.header.separator}")
     private String headerSeparator;
+    @Value("${batchSize}")
+    private Integer batchSize;
 
     public CbProfileUtilsApplication(ProfileDetailService profileDetailService) {
         this.profileDetailService = profileDetailService;
+        if (batchSize == null) {
+            batchSize = 5000;
+        }
     }
 
     @Override
@@ -58,7 +62,7 @@ public class CbProfileUtilsApplication implements CommandLineRunner {
         Thread producer = new Thread(() -> {
             try (BufferedReader reader = Files.newBufferedReader(Paths.get(dataFilePath), StandardCharsets.UTF_8)) {
                 String line;
-                List<String> batch = new ArrayList<>(BATCH_SIZE);
+                List<String> batch = new ArrayList<>(batchSize);
 
                 // Skip header line in data file
                 reader.readLine();
@@ -66,7 +70,7 @@ public class CbProfileUtilsApplication implements CommandLineRunner {
                 while ((line = reader.readLine()) != null) {
                     if (!line.trim().isEmpty()) {
                         batch.add(line);
-                        if (batch.size() == BATCH_SIZE) {
+                        if (batch.size() == batchSize) {
                             queue.put(new ArrayList<>(batch));
                             batch.clear();
                         }
