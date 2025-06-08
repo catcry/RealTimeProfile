@@ -20,16 +20,13 @@ import javax.sql.DataSource;
 import java.util.HashMap;
 import java.util.Map;
 
-//@Configuration
 @EnableJpaRepositories(
         basePackages = "com.example.cbprofileutils.couchbase.repository",
         entityManagerFactoryRef = "entityManagerFactory",
         transactionManagerRef = "transactionManager"
 )
-//@EnableTransactionManagement
 
 @Configuration
-//@EnableJpaRepositories
 @EnableTransactionManagement
 public class JpaConfig {
 

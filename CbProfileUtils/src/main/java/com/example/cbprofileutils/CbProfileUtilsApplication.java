@@ -1,133 +1,140 @@
 package com.example.cbprofileutils;
 
 import com.couchbase.client.java.json.JsonObject;
-import com.example.cbprofileutils.couchbase.repository.CbProfileDetailRepository;
-import com.example.cbprofileutils.couchbase.repository.CbProfileRepository;
 import com.example.cbprofileutils.couchbase.service.ProfileDetailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.ComponentScan;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
 
-import java.io.*;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Objects;
+import java.io.BufferedReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.concurrent.*;
 
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
-@ComponentScan(basePackages = {
-        "com.example.cbprofileutils",
-        "com.example.cbprofileutils.couchbase.config",
-        "com.example.cbprofileutils.couchbase.entity",
-        "com.example.cbprofileutils.couchbase.repository",
-        "com.example.cbprofileutils.couchbase.service"
-})
-public class CbProfileUtilsApplication {
+@Component
+public class CbProfileUtilsApplication implements CommandLineRunner {
 
-    private static final Logger logger = LoggerFactory.getLogger(CbProfileUtilsApplication.class);
-    public static DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    public static CbProfileDetailRepository cbProfileDetailRepository;
-    public static CbProfileRepository cbProfileRepository;
-    public static Boolean filesOver = false;
-    public static Boolean linesOver;
-    public static Long startTime;
-    public static LocalDateTime startDateTime;
-    private static ProfileDetailService profileDetailService;
-    private static String biHeaderSeperator;
-    private static String biDataSeperator;
+    private static final Logger log = LoggerFactory.getLogger(CbProfileUtilsApplication.class);
+    private static final int BATCH_SIZE = 5000;
+    private static final int THREAD_COUNT = Runtime.getRuntime().availableProcessors() * 2;
 
-    public static void main(String[] args) {
-        ConfigurableApplicationContext applicationContext = SpringApplication.run(CbProfileUtilsApplication.class, args);
+    private final ProfileDetailService profileDetailService;
+    @Value("${bi.file.path}")
+    private String dataFilePath;
+    @Value("${bi.data.separator}")
+    private String biDataSeparator;
+    @Value("${header.file.path}")
+    private String headerFilePath;
+    @Value("${bi.header.separator}")
+    private String headerSeparator;
 
-        cbProfileDetailRepository = applicationContext.getBean(CbProfileDetailRepository.class);
-        cbProfileRepository = applicationContext.getBean(CbProfileRepository.class);
-        profileDetailService = applicationContext.getBean(ProfileDetailService.class);
-        String filePath = args.length > 1 ? args[1] : applicationContext.getEnvironment().getProperty("bi.file.path");
-        String headerFilePath = args.length > 2 ? args[2] : applicationContext.getEnvironment().getProperty("header.file.path");
-        biHeaderSeperator = System.getProperty("bi.header.seperator");
-        biDataSeperator = System.getProperty("bi.data.seperator");
-
-        logger.info("Application started");
-        logger.info("filePath: {}", filePath);
-
-        try {
-            readAndUpdateDataFromDirectory(filePath, headerFilePath);
-        } catch (IOException e) {
-            logger.error(e.getMessage());
-        }
+    public CbProfileUtilsApplication(ProfileDetailService profileDetailService) {
+        this.profileDetailService = profileDetailService;
     }
 
-    public static void readAndUpdateDataFromDirectory(String filePath, String headerPath) throws IOException {
-        startTime = System.currentTimeMillis();
-        startDateTime = LocalDateTime.now();
-        try {
-            readAndUpdateDataAsync(filePath, headerPath);
-        } catch (IOException e) {
-            logger.error(e.getMessage());
-        }
-        filesOver = true;
-    }
+    @Override
+    public void run(String... args) throws Exception {
 
-    public static void readAndUpdateDataAsync(String filePath, String headerPath) throws IOException {
-        linesOver = false;
-        String[] headers;
-        try (BufferedReader headerReader = new BufferedReader(new FileReader(headerPath));
-             BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            logger.info("file {} reading process has been started", filePath);
+        long startTime = System.nanoTime();
+        List<String> headers;
+        try (BufferedReader headerReader = Files.newBufferedReader(Paths.get(headerFilePath), StandardCharsets.UTF_8)) {
             String headerLine = headerReader.readLine();
-            headers = headerLine.split(biHeaderSeperator);
-            String line;
-            int lineNumber = 0;
-            while ((line = reader.readLine()) != null && lineNumber < 10) {
-                lineNumber++;
-                String[] parts = line.split(biDataSeperator);
-                if (parts.length != headers.length) {
-                    handleInvalidLine(lineNumber, line);
-                    continue;
-                }
-                JsonObject jsonObject = JsonObject.create();
-                for (int i = 0; i < headers.length; i++) {
-                    jsonObject.put(headers[i], parts[i]);
-                }
-                profileDetailService.updateRtpBucket(jsonObject);
+            if (headerLine == null) {
+                log.error("Header file is empty.");
+                return;
             }
+            headers = Arrays.asList(headerLine.split(headerSeparator));
         }
 
-    }
+        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
+        BlockingQueue<List<String>> queue = new ArrayBlockingQueue<>(THREAD_COUNT * 2);
+        CountDownLatch producerDone = new CountDownLatch(1);
 
-    public static void handleInvalidLine(int lineNumber, String line) {
-        logger.error("Invalid data at line {}: {}", lineNumber, line);
-        String directoryPath = "errors";
-        String fileName = "errors.txt";
-        boolean directoryExists = true;
-        boolean fileExists = true;
-        File directory = new File(directoryPath);
-        if (!directory.exists()) {
-            directoryExists = directory.mkdirs();
-        }
-        if (directoryExists) {
-            File file = new File(directoryPath + File.separator + fileName);
-            if (!file.exists()) {
-                try {
-                    fileExists = file.createNewFile();
-                } catch (IOException e) {
-                    logger.error("error while crating invalid lines error file: {}", e.getMessage());
-                    return;
-                }
-            }
-            if (fileExists) {
-                try {
-                    try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-                        writer.write(line);
-                        writer.newLine();
+        // Producer Thread
+        Thread producer = new Thread(() -> {
+            try (BufferedReader reader = Files.newBufferedReader(Paths.get(dataFilePath), StandardCharsets.UTF_8)) {
+                String line;
+                List<String> batch = new ArrayList<>(BATCH_SIZE);
+
+                // Skip header line in data file
+                reader.readLine();
+
+                while ((line = reader.readLine()) != null) {
+                    if (!line.trim().isEmpty()) {
+                        batch.add(line);
+                        if (batch.size() == BATCH_SIZE) {
+                            queue.put(new ArrayList<>(batch));
+                            batch.clear();
+                        }
                     }
-                } catch (IOException e) {
-                    logger.error("error while writing invalid line at error file: {}", e.getMessage());
                 }
+                if (!batch.isEmpty()) {
+                    queue.put(batch);
+                }
+            } catch (Exception e) {
+                log.error("Error reading the data file", e);
+            } finally {
+                producerDone.countDown();
             }
+        });
+
+        producer.start();
+
+        // Consumer Threads
+        Runnable consumerTask = () -> {
+            try {
+                while (true) {
+                    List<String> batch = queue.poll(1, TimeUnit.SECONDS);
+                    if (batch != null) {
+                        Map<String, JsonObject> biEntityMap = new HashMap<>();
+
+                        for (String line : batch) {
+                            try {
+                                String[] values = line.split(biDataSeparator, -1); // -1 keeps trailing empty strings
+                                JsonObject json = JsonObject.create();
+                                for (int i = 0; i < headers.size() && i < values.length; i++) {
+                                    json.put(headers.get(i), values[i]);
+                                }
+
+                                String msisdn = json.getString("MSISDN");
+                                if (msisdn != null) {
+                                    biEntityMap.put(msisdn, json);
+                                }
+                            } catch (Exception ex) {
+                                log.warn("Skipping invalid CSV line: {}", line, ex);
+                            }
+                        }
+
+                        if (!biEntityMap.isEmpty()) {
+                            profileDetailService.addBIToProfileDetailsUsingBulkLoad(biEntityMap);
+                        }
+                    } else if (producerDone.getCount() == 0 && queue.isEmpty()) {
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error processing batch", e);
+            }
+        };
+
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < THREAD_COUNT; i++) {
+            futures.add(executor.submit(consumerTask));
         }
+
+        for (Future<?> future : futures) {
+            future.get();
+        }
+
+        executor.shutdown();
+        executor.awaitTermination(1, TimeUnit.HOURS);
+
+        long endTime = System.nanoTime();
+        log.info("Processing completed in {} seconds", (endTime - startTime) / 1_000_000_000);
+        System.exit(0);
     }
 }
