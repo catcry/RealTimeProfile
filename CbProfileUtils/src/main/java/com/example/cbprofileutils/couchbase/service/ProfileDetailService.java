@@ -8,6 +8,7 @@ import com.couchbase.client.java.Collection;
 import com.couchbase.client.java.json.JsonObject;
 import com.couchbase.client.java.kv.GetResult;
 import com.couchbase.client.java.kv.MutateInSpec;
+import com.example.cbprofileutils.util.RandomUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,7 +44,7 @@ public class ProfileDetailService {
             String msisdn = json.getString("MSISDN");
             if (msisdn == null || msisdn.length() < 3) return;
 
-            String profileDetailId = msisdn.substring(2) + System.nanoTime();
+            String profileDetailId = msisdn.substring(2) + RandomUtil.getUnixTimeString().substring(5);
             String profileKey = "p::" + profileDetailId;
 
             Collection profileIdsCollection = profileIdsBucket.defaultCollection();
