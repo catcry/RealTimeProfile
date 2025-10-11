@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.example</groupId>
     <artifactId>current-mci-profile-utils</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.4</version>
     <packaging>jar</packaging>
     <name>profile-utils</name>
     <description>Couchbase_Profile_Utils</description>
@@ -118,6 +118,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <mainClass>com.example.cbprofileutils.ProfileUtilsLauncher</mainClass>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

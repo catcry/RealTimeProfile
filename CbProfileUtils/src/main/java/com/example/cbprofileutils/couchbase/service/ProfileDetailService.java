@@ -5,6 +5,7 @@ import com.couchbase.client.core.error.TimeoutException;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Cluster;
 import com.couchbase.client.java.Collection;
+import com.couchbase.client.java.json.JsonArray;
 import com.couchbase.client.java.json.JsonObject;
 import com.couchbase.client.java.kv.GetResult;
 import com.couchbase.client.java.kv.MutateInSpec;
@@ -74,6 +75,16 @@ public class ProfileDetailService {
                                            String biMsisdn, String msisdn, String profileKey, JsonObject biObject) {
 
         JsonObject referenceDoc = JsonObject.create().put("id", profileKey);
+        JsonArray profileArray = JsonArray.create().add(
+                JsonObject.create().put("attr", JsonArray.create())
+                        .put("id", profileKey.substring(3))
+                        .put("priority", 1)
+                        .put("roles", JsonArray.create()));
+        JsonObject newMSISDNProfile = JsonObject.create()
+                .put("profiles",  profileArray)
+                .put("type", "MSISDN")
+                .put("value", msisdn);
+
         JsonObject newProfileDoc = JsonObject.create()
                 .put("id", "p::" + biMsisdn)
                 .put("name", "FAA_" + msisdn)
@@ -84,6 +95,7 @@ public class ProfileDetailService {
             profileIds.insert(msisdn, referenceDoc);
             temp.insert(msisdn, referenceDoc);
             main.insert(profileKey, newProfileDoc);
+            main.insert("MSISDN::" + msisdn, newMSISDNProfile);
         });
     }
 

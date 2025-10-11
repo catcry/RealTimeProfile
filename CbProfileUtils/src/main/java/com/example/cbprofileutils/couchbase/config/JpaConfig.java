@@ -20,62 +20,62 @@ import javax.sql.DataSource;
 import java.util.HashMap;
 import java.util.Map;
 
-@EnableJpaRepositories(
-        basePackages = "com.example.cbprofileutils.couchbase.repository",
-        entityManagerFactoryRef = "entityManagerFactory",
-        transactionManagerRef = "transactionManager"
-)
-
-@Configuration
-@EnableTransactionManagement
+//@EnableJpaRepositories(
+//        basePackages = "com.example.cbprofileutils.couchbase.repository",
+//        entityManagerFactoryRef = "entityManagerFactory",
+//        transactionManagerRef = "transactionManager"
+//)
+//
+//@Configuration
+//@EnableTransactionManagement
 public class JpaConfig {
 
-    @Value("${spring.datasource.url}")
-    private String dbUrl;
-
-    @Value("${spring.datasource.username}")
-    private String username;
-
-    @Value("${spring.datasource.password}")
-    private String password;
-
-    @Value("${spring.jpa.properties.hibernate.dialect}")
-    private String dialect;
-
-    @Bean
-    public DataSource dataSource() {
-        return DataSourceBuilder.create()
-                .url(dbUrl)
-                .username(username)
-                .password(password)
-                .build();
-    }
+//    @Value("${spring.datasource.url}")
+//    private String dbUrl;
+//
+//    @Value("${spring.datasource.username}")
+//    private String username;
+//
+//    @Value("${spring.datasource.password}")
+//    private String password;
+//
+//    @Value("${spring.jpa.properties.hibernate.dialect}")
+//    private String dialect;
+//
 //    @Bean
 //    public DataSource dataSource() {
-//
-//        EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
-//        return builder.setType(EmbeddedDatabaseType.HSQL).build();
+//        return DataSourceBuilder.create()
+//                .url(dbUrl)
+//                .username(username)
+//                .password(password)
+//                .build();
 //    }
-
-    @Bean
-    public LocalContainerEntityManagerFactoryBean entityManagerFactory() {
-
-        HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
-        vendorAdapter.setGenerateDdl(true);
-
-        LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
-        factory.setJpaVendorAdapter(vendorAdapter);
-        factory.setPackagesToScan("com.example.cbprofileutils.couchbase.entity");
-        factory.setDataSource(dataSource());
-        return factory;
-    }
-
-    @Bean
-    public PlatformTransactionManager transactionManager(EntityManagerFactory entityManagerFactory) {
-
-        JpaTransactionManager txManager = new JpaTransactionManager();
-        txManager.setEntityManagerFactory(entityManagerFactory);
-        return txManager;
-    }
+////    @Bean
+////    public DataSource dataSource() {
+////
+////        EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
+////        return builder.setType(EmbeddedDatabaseType.HSQL).build();
+////    }
+//
+//    @Bean
+//    public LocalContainerEntityManagerFactoryBean entityManagerFactory() {
+//
+//        HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
+//        vendorAdapter.setGenerateDdl(true);
+//
+//        LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
+//        factory.setJpaVendorAdapter(vendorAdapter);
+//        factory.setPackagesToScan("com.example.cbprofileutils.couchbase.entity");
+//        factory.setDataSource(dataSource());
+//        return factory;
+//    }
+//
+//    @Bean
+//    public PlatformTransactionManager transactionManager(EntityManagerFactory entityManagerFactory) {
+//
+//        JpaTransactionManager txManager = new JpaTransactionManager();
+//        txManager.setEntityManagerFactory(entityManagerFactory);
+//        return txManager;
+//    }
 }
 
