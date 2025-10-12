@@ -1,0 +1,12 @@
+{
+  "id": "",
+  "name": "",
+  "type": "FAA",
+  "attrGrps": {
+    "personal": { "firstName": null, "lastName": null },
+    "billing": { "lastTopupDate": null },
+    "metrics": { "arpu": null },
+    "flags": { "isVip": null },
+    "external_metrics": {}
+  }
+}

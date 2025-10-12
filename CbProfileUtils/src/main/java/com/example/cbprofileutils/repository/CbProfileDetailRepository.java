@@ -1,8 +1,8 @@
-package com.example.cbprofileutils.couchbase.repository;
+package com.example.cbprofileutils.repository;
 
 import com.couchbase.client.java.json.JsonObject;
-import com.example.cbprofileutils.couchbase.entity.CbBIEntity;
-import com.example.cbprofileutils.couchbase.entity.CbProfileDetailEntity;
+import com.example.cbprofileutils.entity.CbBIEntity;
+import com.example.cbprofileutils.entity.CbProfileDetailEntity;
 import org.springframework.data.couchbase.repository.CouchbaseRepository;
 import org.springframework.data.couchbase.repository.Query;
 import org.springframework.data.repository.query.Param;

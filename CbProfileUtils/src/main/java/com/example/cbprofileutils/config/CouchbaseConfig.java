@@ -1,4 +1,4 @@
-package com.example.cbprofileutils.couchbase.config;
+package com.example.cbprofileutils.config;
 
 
 import org.springframework.beans.factory.annotation.Value;

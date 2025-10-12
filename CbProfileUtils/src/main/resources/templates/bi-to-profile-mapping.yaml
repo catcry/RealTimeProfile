@@ -1,0 +1,28 @@
+id_field: "MSISDN"
+profile_key_prefix: "p::"
+msisdn_key_prefix: "MSISDN::"
+
+fields:
+  FIRST_NAME:
+    target: "attrGrps.personal.firstName"
+    type: "string"
+
+  LAST_NAME:
+    target: "attrGrps.personal.lastName"
+    type: "string"
+
+  LAST_TOPUP_DATE:
+    target: "attrGrps.billing.lastTopupDate"
+    type: "date"
+    in_format: "yyyy-MM-dd"
+    out_format: "yyyy-MM-dd"
+
+  ARPU:
+    target: "attrGrps.metrics.arpu"
+    type: "number"
+
+  IS_VIP:
+    target: "attrGrps.flags.isVip"
+    type: "boolean"
+
+save_raw_under: "attrGrps.external_metrics"

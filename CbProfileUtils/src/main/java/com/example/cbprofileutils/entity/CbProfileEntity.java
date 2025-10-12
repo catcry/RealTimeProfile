@@ -1,4 +1,4 @@
-package com.example.cbprofileutils.couchbase.entity;
+package com.example.cbprofileutils.entity;
 
 import lombok.Getter;
 import lombok.Setter;
