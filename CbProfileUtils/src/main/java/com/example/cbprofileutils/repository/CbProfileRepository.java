@@ -1,6 +1,6 @@
-package com.example.cbprofileutils.couchbase.repository;
+package com.example.cbprofileutils.repository;
 
-import com.example.cbprofileutils.couchbase.entity.CbProfileEntity;
+import com.example.cbprofileutils.entity.CbProfileEntity;
 import org.springframework.data.couchbase.repository.CouchbaseRepository;
 import org.springframework.stereotype.Repository;
 
