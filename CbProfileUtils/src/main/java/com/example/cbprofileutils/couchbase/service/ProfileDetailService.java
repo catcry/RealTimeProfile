@@ -26,13 +26,15 @@ public class ProfileDetailService {
     private final Bucket mainBucket;
     private final Bucket profileIdsBucket;
     private final Bucket tempBucket;
+    private PsqlProfileIdsService psqlProfileIdsService;
 
     public ProfileDetailService(
             CouchbaseTemplate couchbaseTemplate,
             @Value("${spring.data.couchbase.bucket-name}") String bucketName,
             @Value("${profileIdsBucket}") String profileIdsBucketName,
-            @Value("${profileIdsTemporaryBucket}") String profileIdsTemporaryBucketName
+            @Value("${profileIdsTemporaryBucket}") String profileIdsTemporaryBucketName, PsqlProfileIdsService psqlProfileIdsService
     ) {
+        this.psqlProfileIdsService = psqlProfileIdsService;
         Cluster cluster = couchbaseTemplate.getCouchbaseClientFactory().getCluster();
         this.mainBucket = cluster.bucket(bucketName);
         this.profileIdsBucket = cluster.bucket(profileIdsBucketName);
@@ -44,8 +46,9 @@ public class ProfileDetailService {
             String msisdn = json.getString("MSISDN");
             if (msisdn == null || msisdn.length() < 3) return;
 
-            String profileDetailId = msisdn.substring(2) + RandomUtil.getUnixTimeString().substring(5);
-            String profileKey = "p::" + profileDetailId;
+            //String profileDetailId = msisdn.substring(2) + RandomUtil.getUnixTimeString().substring(5);
+            Long profileDetailId =  psqlProfileIdsService.getOrCreateId(msisdn);
+            String profileKey = "p::" + String.valueOf(profileDetailId);
 
             Collection profileIdsCollection = profileIdsBucket.defaultCollection();
             Collection tempCollection = tempBucket.defaultCollection();
