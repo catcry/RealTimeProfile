@@ -23,7 +23,6 @@ import java.util.Map;
 public class ProfileDetailService {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileDetailService.class);
-    private final Cluster cluster;
     private final Bucket mainBucket;
     private final Bucket profileIdsBucket;
     private final Bucket tempBucket;
@@ -34,7 +33,7 @@ public class ProfileDetailService {
             @Value("${profileIdsBucket}") String profileIdsBucketName,
             @Value("${profileIdsTemporaryBucket}") String profileIdsTemporaryBucketName
     ) {
-        this.cluster = couchbaseTemplate.getCouchbaseClientFactory().getCluster();
+        Cluster cluster = couchbaseTemplate.getCouchbaseClientFactory().getCluster();
         this.mainBucket = cluster.bucket(bucketName);
         this.profileIdsBucket = cluster.bucket(profileIdsBucketName);
         this.tempBucket = cluster.bucket(profileIdsTemporaryBucketName);
