@@ -4,9 +4,9 @@ import com.couchbase.client.java.json.JsonObject;
 import com.example.cbprofileutils.service.ProfileDetailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -15,133 +15,162 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 public class CbProfileUtilsApplication implements CommandLineRunner {
-
     private static final Logger log = LoggerFactory.getLogger(CbProfileUtilsApplication.class);
-    private static final int THREAD_COUNT = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
 
-    private final org.springframework.context.ApplicationContext ctx;
+    private static final int THREAD_COUNT = Math.min(40, Math.max(4, Runtime.getRuntime().availableProcessors()));
+    private static final int QUEUE_CAPACITY = THREAD_COUNT * 1024;
+
+    private final ApplicationContext ctx;
     private final ProfileDetailService profileDetailService;
 
-    @Value("${bi.file.path}")
-    private String dataFilePath;
-    @Value("${bi.data.separator}")
-    private String biDataSeparator;
-    @Value("${header.file.path}")
-    private String headerFilePath;
-    @Value("${bi.header.separator}")
-    private String headerSeparator;
+    @Value("${bi.file.path}") private String dataFilePath;
+    @Value("${bi.data.separator}") private String biDataSeparator;
+    @Value("${header.file.path}") private String headerFilePath;
+    @Value("${batchSize:50000}") private int batchSize;
 
-    @Value("${batchSize:5000}")
-    private int batchSize;
-
-    public CbProfileUtilsApplication(org.springframework.context.ApplicationContext ctx, ProfileDetailService profileDetailService) {
+    public CbProfileUtilsApplication(ApplicationContext ctx, ProfileDetailService profileDetailService) {
         this.ctx = ctx;
         this.profileDetailService = profileDetailService;
     }
 
+    private static String[] fastSplit(String s, char delim, int expectedCols) {
+        String[] out = new String[expectedCols];
+        int start = 0, idx = 0;
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == delim) {
+                out[idx++] = s.substring(start, i);
+                start = i + 1;
+                if (idx >= expectedCols) break;
+            }
+        }
+        if (idx < expectedCols) out[idx++] = s.substring(start);
+        return idx == out.length ? out : Arrays.copyOf(out, idx);
+    }
+
     @Override
     public void run(String... args) throws Exception {
+        log.info("Starting profile data processing...");
+
+        if (!Files.exists(Paths.get(dataFilePath)) || !Files.exists(Paths.get(headerFilePath))) {
+            log.error("Data or header file not found.");
+            System.exit(1);
+        }
+
         long startTime = System.nanoTime();
 
-        // load headers once
-        List<String> headers;
+        // --- Read headers ---
+        final List<String> headers;
+        final int msisdnIdx;
         try (BufferedReader headerReader = Files.newBufferedReader(Paths.get(headerFilePath), StandardCharsets.UTF_8)) {
             String headerLine = headerReader.readLine();
             if (headerLine == null) {
                 log.error("Header file is empty.");
-                return;
+                System.exit(1);
             }
-            headers = Arrays.asList(headerLine.split(headerSeparator, -1));
+            headers = Arrays.asList(headerLine.split(",", -1));
+            msisdnIdx = headers.indexOf("MSISDN");
+            if (msisdnIdx < 0) {
+                log.error("MSISDN header not found");
+                System.exit(1);
+            }
         }
 
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT, r -> {
-            Thread t = new Thread(r);
-            t.setName("bi-consumer-" + t.getId());
-//            t.setDaemon(true);
-            return t;
-        });
-        BlockingQueue<List<String>> queue = new ArrayBlockingQueue<>(THREAD_COUNT * 2);
+        // --- Producer-consumer setup ---
+        BlockingQueue<String> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
         CountDownLatch producerDone = new CountDownLatch(1);
+        AtomicInteger totalProcessed = new AtomicInteger(0);
+        AtomicInteger totalSkipped = new AtomicInteger(0);
 
-        // Producer: stream CSV into batches
+        // --- Producer thread ---
         Thread producer = new Thread(() -> {
             try (BufferedReader reader = Files.newBufferedReader(Paths.get(dataFilePath), StandardCharsets.UTF_8)) {
                 String line;
-                List<String> batch = new ArrayList<>(batchSize);
-                reader.readLine(); // skip data header
+                long recordsRead = 0;
                 while ((line = reader.readLine()) != null) {
-                    if (!line.trim().isEmpty()) {
-                        batch.add(line);
-                        if (batch.size() == batchSize) {
-                            queue.put(new ArrayList<>(batch));
-                            batch.clear();
-                        }
+                    if (!line.isBlank()) {
+                        queue.put(line);
+                        if (++recordsRead % 100_000 == 0) log.info("Read {} records", recordsRead);
                     }
                 }
-                if (!batch.isEmpty()) queue.put(batch);
             } catch (Exception e) {
-                log.error("Error reading the data file", e);
+                log.error("Error reading data file", e);
             } finally {
                 producerDone.countDown();
             }
         }, "bi-producer");
-
         producer.start();
 
-        // Consumer task
+        // --- Consumers ---
+        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
         Runnable consumerTask = () -> {
-            try {
-                while (true) {
-                    List<String> batch = queue.poll(1, TimeUnit.SECONDS);
-                    if (batch != null) {
-                        Map<String, JsonObject> biEntityMap = new HashMap<>(batch.size()*2);
+            List<String> localBatch = new ArrayList<>(batchSize);
+            while (true) {
+                localBatch.clear();
+                queue.drainTo(localBatch, batchSize);
 
-                        for (String row : batch) {
-                            try {
-                                String[] values = row.split(biDataSeparator, -1);
-                                JsonObject json = JsonObject.create();
-                                if (values.length < headers.size()) {
-                                    log.warn("Row has fewer columns than header, skipping: {}", row);
-                                    continue;
-                                }
-                                for (int i = 0; i < headers.size() && i < values.length; i++) {
-                                    json.put(headers.get(i), values[i]);
-                                }
-                                String msisdn = json.getString("MSISDN");
-                                if (msisdn != null && !msisdn.isBlank()) {
-                                    biEntityMap.put(msisdn, json);
-                                }
-                            } catch (Exception ex) {
-                                log.warn("Skipping invalid CSV line: {}", row, ex);
-                            }
-                        }
-
-                        if (!biEntityMap.isEmpty()) {
-                            profileDetailService.addBIToProfileDetailsUsingBulkLoad(biEntityMap);
-                        }
-                    } else if (producerDone.getCount() == 0 && queue.isEmpty()) {
+                // poll if nothing drained
+                if (localBatch.isEmpty() && producerDone.getCount() > 0) {
+                    try {
+                        String line = queue.poll(100, TimeUnit.MILLISECONDS);
+                        if (line != null) localBatch.add(line);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                         break;
                     }
                 }
-            } catch (Exception e) {
-                log.error("Error processing batch", e);
+
+                if (localBatch.isEmpty() && producerDone.getCount() == 0 && queue.isEmpty()) break;
+
+                if (!localBatch.isEmpty()) {
+                    Map<String, JsonObject> biEntityMap = new HashMap<>();
+                    for (String row : localBatch) {
+                        try {
+                            String[] values = fastSplit(row, biDataSeparator.charAt(0), headers.size());
+                            if (values.length <= msisdnIdx || values[msisdnIdx].isBlank()) {
+                                totalSkipped.incrementAndGet();
+                                continue;
+                            }
+                            if (values.length < headers.size()) values = Arrays.copyOf(values, headers.size());
+                            JsonObject json = JsonObject.create();
+                            for (int i = 0; i < headers.size(); i++) json.put(headers.get(i), values[i]);
+                            biEntityMap.put(values[msisdnIdx], json);
+                        } catch (Exception e) {
+                            totalSkipped.incrementAndGet();
+                        }
+                    }
+                    if (!biEntityMap.isEmpty()) {
+                        try {
+                            profileDetailService.addBIToProfileDetailsUsingBulkLoad(biEntityMap).join();
+                        } catch (Exception e) {
+                            log.error("Error processing BI entity map", e);
+                        }
+                        int processed = totalProcessed.addAndGet(biEntityMap.size());
+                        if (processed % 100_000 == 0) log.info("Processed {}, skipped {}", processed, totalSkipped.get());
+                    }
+                }
             }
         };
 
+        // --- Submit consumers ---
         List<Future<?>> futures = new ArrayList<>();
         for (int i = 0; i < THREAD_COUNT; i++) futures.add(executor.submit(consumerTask));
         for (Future<?> f : futures) f.get();
 
         executor.shutdown();
-        executor.awaitTermination(1, TimeUnit.HOURS);
+        if (!executor.awaitTermination(30, TimeUnit.MINUTES)) log.warn("Executor did not terminate gracefully");
 
-        long endTime = System.nanoTime();
-        log.info("Processing completed in {} seconds", (endTime - startTime) / 1_000_000_000);
-        // Tell Spring to shut down cleanly; returns exit code (default 0)
+        double duration = (System.nanoTime() - startTime) / 1_000_000_000.0;
+        log.info("=========================================");
+        log.info("PROCESSING COMPLETED");
+        log.info("Total time: {} s, processed: {}, skipped: {}, RPS: {}",
+                String.format("%.2f", duration), totalProcessed.get(), totalSkipped.get(),
+                String.format("%.2f", totalProcessed.get() / duration));
+
         int code = org.springframework.boot.SpringApplication.exit(ctx);
-        System.exit(code); // optional; remove in dev
+        System.exit(code);
     }
 }

@@ -5,11 +5,12 @@ import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public final class MappingLoader {
-
-    @SuppressWarnings("unchecked")
+    private MappingLoader() {}
     public static CompiledMapping loadMapping(InputStream yamlIn) {
         Map<String, Object> y = new Yaml().load(yamlIn);
         String idField = (String) y.getOrDefault("id_field", "MSISDN");
@@ -30,11 +31,8 @@ public final class MappingLoader {
         ));
         return new CompiledMapping(idField, pfxP, pfxM, rawPath, compiled);
     }
-
     public static JsonObject loadTemplate(InputStream jsonIn) throws Exception {
         String s = new String(jsonIn.readAllBytes(), StandardCharsets.UTF_8);
         return JsonObject.fromJson(s);
     }
-
-    private MappingLoader() {}
 }

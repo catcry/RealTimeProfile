@@ -33,9 +33,6 @@ public class JpaConfig {
     @Value("${spring.datasource.password}")
     private String password;
 
-    @Value("${spring.jpa.properties.hibernate.dialect}")
-    private String dialect;
-
     @Bean
     public DataSource dataSource() {
         return DataSourceBuilder.create()
@@ -44,12 +41,6 @@ public class JpaConfig {
                 .password(password)
                 .build();
     }
-//    @Bean
-//    public DataSource dataSource() {
-//
-//        EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
-//        return builder.setType(EmbeddedDatabaseType.HSQL).build();
-//    }
 
     @Bean
     public LocalContainerEntityManagerFactoryBean entityManagerFactory() {

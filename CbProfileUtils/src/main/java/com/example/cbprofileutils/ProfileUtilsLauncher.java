@@ -1,16 +1,18 @@
 package com.example.cbprofileutils;
 
 
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+
 
 @SpringBootApplication
-@org.springframework.boot.autoconfigure.domain.EntityScan(
-        basePackages = "com.example.cbprofileutils.entity"
-)
+@EntityScan(basePackages = "com.example.cbprofileutils.entity")
 public class ProfileUtilsLauncher {
     public static void main(String[] args) {
-        new org.springframework.boot.builder.SpringApplicationBuilder(ProfileUtilsLauncher.class)
-                .web(org.springframework.boot.WebApplicationType.NONE)
-                .run(args);
+        System.setProperty("spring.devtools.restart.enabled", "false");
+        System.setProperty("spring.devtools.livereload.enabled", "false");
+
+        SpringApplication.run(ProfileUtilsLauncher.class, args);
     }
 }
